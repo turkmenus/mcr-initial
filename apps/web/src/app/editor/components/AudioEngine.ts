@@ -7,9 +7,11 @@ class TimelineAudioEngine {
   private mediaDest: MediaStreamAudioDestinationNode | null = null;
   private isInitialized = false;
   private activeOscillators: OscillatorNode[] = [];
+  private activeAudioElements: Map<string, HTMLAudioElement> = new Map();
 
   public init() {
     if (this.isInitialized && this.ctx) return;
+    if (typeof window === "undefined") return;
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioCtx) return;
@@ -30,9 +32,77 @@ class TimelineAudioEngine {
   }
 
   public resume() {
+    if (!this.isInitialized) this.init();
     if (this.ctx && this.ctx.state === "suspended") {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
+  }
+
+  public syncTimelineAudio(project: any, currentTime: number, isPlaying: boolean) {
+    if (!this.isInitialized) this.init();
+    if (!this.ctx || !this.masterGain) return;
+
+    if (!isPlaying) {
+      this.stopAllPlayback();
+      return;
+    }
+
+    this.resume();
+
+    // Find active audio tracks
+    if (!project || !project.tracks) return;
+    const audioTracks = project.tracks.filter((t: any) => t.type === "audio" && !t.muted);
+
+    audioTracks.forEach((track: any) => {
+      track.clips.forEach((clip: any) => {
+        const clipStart = clip.start || 0;
+        const clipEnd = clipStart + (clip.duration || 0);
+
+        if (currentTime >= clipStart && currentTime <= clipEnd) {
+          const localTime = (currentTime - clipStart) + (clip.offset || 0);
+
+          // Handle real audio files
+          if (clip.src && (clip.src.startsWith("/") || clip.src.startsWith("blob:") || clip.src.startsWith("http"))) {
+            let audioEl = this.activeAudioElements.get(clip.id);
+            if (!audioEl) {
+              audioEl = new Audio(clip.src);
+              audioEl.crossOrigin = "anonymous";
+              this.activeAudioElements.set(clip.id, audioEl);
+            }
+
+            if (Math.abs(audioEl.currentTime - localTime) > 0.2) {
+              audioEl.currentTime = localTime;
+            }
+            if (audioEl.paused) {
+              audioEl.volume = Math.max(0, Math.min(1, clip.volume ?? 1));
+              audioEl.play().catch(() => {});
+            }
+          }
+        } else {
+          // Clip is not active, pause if running
+          const audioEl = this.activeAudioElements.get(clip.id);
+          if (audioEl && !audioEl.paused) {
+            audioEl.pause();
+          }
+        }
+      });
+    });
+  }
+
+  public stopAllPlayback() {
+    this.activeOscillators.forEach((osc) => {
+      try {
+        osc.stop();
+        osc.disconnect();
+      } catch {}
+    });
+    this.activeOscillators = [];
+
+    this.activeAudioElements.forEach((audioEl) => {
+      try {
+        audioEl.pause();
+      } catch {}
+    });
   }
 
   public playSoundEffect(type: "hit" | "jingle" | "click" | "beep") {
@@ -43,7 +113,6 @@ class TimelineAudioEngine {
     const now = this.ctx.currentTime;
 
     if (type === "hit") {
-      // Dramatic sub boom
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
       osc.type = "sine";
@@ -58,7 +127,6 @@ class TimelineAudioEngine {
       osc.start(now);
       osc.stop(now + 0.8);
     } else if (type === "jingle") {
-      // News fanfare 3-note triad (F4 -> A4 -> C5 -> F5)
       const freqs = [349.23, 440.0, 523.25, 698.46];
       freqs.forEach((f, i) => {
         if (!this.ctx || !this.masterGain) return;
@@ -106,6 +174,7 @@ class TimelineAudioEngine {
   }
 
   public setMasterVolume(vol: number) {
+    if (!this.isInitialized) this.init();
     if (this.masterGain && this.ctx) {
       this.masterGain.gain.setValueAtTime(Math.max(0, Math.min(2, vol)), this.ctx.currentTime);
     }
