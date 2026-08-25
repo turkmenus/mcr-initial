@@ -1,0 +1,12 @@
+node_modules
+.pnpm-store
+.next
+dist
+build
+renders
+uploads
+thumbnails
+data
+scratch
+.git
+*.log
