@@ -143,7 +143,7 @@ export default function EditorPage() {
   // Fetch Media Assets on Load
   const fetchMediaAssets = async () => {
     try {
-      const res = await fetch("http://localhost:4002/api/media/list");
+      const res = await fetch("/api/media/list");
       if (res.ok) {
         const data = await res.json();
         setMediaAssets(data);
@@ -168,7 +168,7 @@ export default function EditorPage() {
       const reader = new FileReader();
       reader.onload = async () => {
         const base64 = (reader.result as string).split(",")[1];
-        const res = await fetch("http://localhost:4002/api/media/upload", {
+        const res = await fetch("/api/media/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -305,7 +305,7 @@ export default function EditorPage() {
   const handleTriggerExport = async () => {
     setRenderStatus("Render kuyruğuna gönderiliyor (FFmpeg Worker)...");
     try {
-      const res = await fetch("http://localhost:4002/api/render/timeline", {
+      const res = await fetch("/api/render/timeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ project, presetId: selectedPresetId }),
@@ -315,12 +315,12 @@ export default function EditorPage() {
         setRenderStatus(`Render Başladı (Job: ${data.jobId})`);
         const interval = setInterval(async () => {
           try {
-            const check = await fetch(`http://localhost:4002/api/render/jobs/${data.jobId}`);
+            const check = await fetch(`/api/render/jobs/${data.jobId}`);
             const jobData = await check.json();
             if (jobData.status === "COMPLETED") {
               clearInterval(interval);
               setRenderStatus("Master Render Başarıyla Tamamlandı!");
-              setRenderedDownloadUrl(`http://localhost:4002${jobData.outputPath}`);
+              setRenderedDownloadUrl(jobData.outputPath);
             } else if (jobData.status === "FAILED") {
               clearInterval(interval);
               setRenderStatus(`Render Hatası: ${jobData.error}`);

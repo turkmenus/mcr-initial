@@ -6,7 +6,7 @@ services:
   # ==========================================
   web:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
       target: web
     container_name: mcr-web
@@ -30,7 +30,7 @@ services:
   # ==========================================
   realtime:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
       target: realtime
     container_name: mcr-realtime
@@ -57,7 +57,7 @@ services:
   # ==========================================
   renderer:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
       target: renderer
     container_name: mcr-renderer
@@ -122,8 +122,8 @@ services:
     ports:
       - "5250:5250"
     volumes:
-      - ./casparcg.config:/casparcg/casparcg.config
-      - ../templates:/casparcg/template
+      - ./infra/casparcg.config:/casparcg/casparcg.config
+      - ./templates:/casparcg/template
     networks:
       - mcr-net
 

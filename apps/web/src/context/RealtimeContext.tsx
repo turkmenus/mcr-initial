@@ -50,7 +50,14 @@ export const RealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const connectWs = useCallback(() => {
     try {
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:4001";
+      let defaultWs = "ws://localhost:4001";
+      if (typeof window !== "undefined") {
+        const isHttps = window.location.protocol === "https:";
+        const proto = isHttps ? "wss:" : "ws:";
+        const host = window.location.hostname || "localhost";
+        defaultWs = `${proto}//${host}:4001`;
+      }
+      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || defaultWs;
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

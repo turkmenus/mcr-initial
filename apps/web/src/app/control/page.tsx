@@ -123,7 +123,7 @@ export default function LiveControlPage() {
     setPreviewSource(oldPgm);
 
     try {
-      await fetch("http://localhost:4001/api/switcher/transition", {
+      await fetch("/api/switcher/transition", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

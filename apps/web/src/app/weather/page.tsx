@@ -93,7 +93,7 @@ export default function WeatherStudioPage() {
   const handleRenderSegment = async () => {
     setRenderStatus("Hava durumu video segmenti render ediliyor (FFmpeg Worker)...");
     try {
-      const res = await fetch("http://localhost:4002/api/render/weather", {
+      const res = await fetch("/api/render/weather", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -112,12 +112,12 @@ export default function WeatherStudioPage() {
         setRenderStatus(`Render Kuyrukta (Job: ${data.jobId})`);
         const interval = setInterval(async () => {
           try {
-            const check = await fetch(`http://localhost:4002/api/render/jobs/${data.jobId}`);
+            const check = await fetch(`/api/render/jobs/${data.jobId}`);
             const jobData = await check.json();
             if (jobData.status === "COMPLETED") {
               clearInterval(interval);
               setRenderStatus("Hava Durumu Video Klibi Başarıyla Üretildi!");
-              setRenderedClipUrl(`http://localhost:4002${jobData.outputPath}`);
+              setRenderedClipUrl(jobData.outputPath);
             }
           } catch {}
         }, 1500);
