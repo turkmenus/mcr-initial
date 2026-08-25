@@ -53,6 +53,7 @@ import {
   trimClip,
   addTrack,
   removeTrack,
+  reorderTracks,
   updateTrack,
   addMarker,
   removeMarker,
@@ -509,6 +510,11 @@ export default function EditorPage() {
     pushStateToHistory(nextProject);
   };
 
+  const handleReorderTracks = (sourceTrackId: string, targetTrackId: string) => {
+    const nextProject = reorderTracks(project, sourceTrackId, targetTrackId);
+    pushStateToHistory(nextProject);
+  };
+
   const handleToggleTrackMute = (trackId: string) => {
     const tr = project.tracks.find((t) => t.id === trackId);
     if (!tr) return;
@@ -924,6 +930,7 @@ export default function EditorPage() {
               onDuplicateClip={handleDuplicateClip}
               onAddTrack={handleAddTrack}
               onRemoveTrack={handleRemoveTrack}
+              onReorderTracks={handleReorderTracks}
               onToggleTrackMute={handleToggleTrackMute}
               onToggleTrackVisible={handleToggleTrackVisible}
               onToggleTrackLock={handleToggleTrackLock}

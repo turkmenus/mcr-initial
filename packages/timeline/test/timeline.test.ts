@@ -9,6 +9,7 @@ import {
   updateClipProperties,
   addTrack,
   removeTrack,
+  reorderTracks,
   addMarker,
   removeMarker,
   formatTimecode,
@@ -47,7 +48,7 @@ describe("Timeline EDL Operations and Frame Queries", () => {
     expect(videoTrack.clips[1].offset).toBe(4);
   });
 
-  it("should move a clip to a new start time and track", () => {
+  it("should move a clip to a new start time and different track", () => {
     const project = createDefaultTimelineProject();
     const withClip = addClipToTrack(project, "track_video_1", {
       id: "clip_move_1",
@@ -59,9 +60,21 @@ describe("Timeline EDL Operations and Frame Queries", () => {
       offset: 0,
     });
 
-    const moved = moveClip(withClip, "clip_move_1", 10);
+    const moved = moveClip(withClip, "clip_move_1", 10, "track_text_1");
     const v1Track = moved.tracks.find((t) => t.id === "track_video_1")!;
-    expect(v1Track.clips[0].start).toBe(10);
+    const t1Track = moved.tracks.find((t) => t.id === "track_text_1")!;
+    expect(v1Track.clips.length).toBe(0);
+    expect(t1Track.clips.length).toBe(1);
+    expect(t1Track.clips[0].start).toBe(10);
+  });
+
+  it("should reorder timeline tracks (layer drag and drop)", () => {
+    const project = createDefaultTimelineProject();
+    const firstTrackId = project.tracks[0].id; // track_graphics_1
+    const lastTrackId = project.tracks[project.tracks.length - 1].id; // track_audio_2
+
+    const reordered = reorderTracks(project, firstTrackId, lastTrackId);
+    expect(reordered.tracks[reordered.tracks.length - 1].id).toBe(firstTrackId);
   });
 
   it("should duplicate a clip after itself", () => {

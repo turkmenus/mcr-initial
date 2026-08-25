@@ -386,6 +386,32 @@ export function addMarker(
 }
 
 /**
+ * Reorders tracks in the timeline (Layer Drag & Drop)
+ */
+export function reorderTracks(
+  project: TimelineProject,
+  sourceTrackId: string,
+  targetTrackId: string
+): TimelineProject {
+  if (sourceTrackId === targetTrackId) return project;
+
+  const sourceIndex = project.tracks.findIndex((t) => t.id === sourceTrackId);
+  const targetIndex = project.tracks.findIndex((t) => t.id === targetTrackId);
+
+  if (sourceIndex === -1 || targetIndex === -1) return project;
+
+  const newTracks = [...project.tracks];
+  const [removed] = newTracks.splice(sourceIndex, 1);
+  newTracks.splice(targetIndex, 0, removed);
+
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: newTracks,
+  };
+}
+
+/**
  * Removes a marker from the timeline
  */
 export function removeMarker(project: TimelineProject, markerId: string): TimelineProject {
@@ -395,3 +421,4 @@ export function removeMarker(project: TimelineProject, markerId: string): Timeli
     markers: (project.markers || []).filter((m) => m.id !== markerId),
   };
 }
+

@@ -24,6 +24,7 @@ import {
   MousePointer,
   Sparkles,
   Radio,
+  GripVertical,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -52,6 +53,7 @@ interface InteractiveTimelineProps {
   onDuplicateClip: (clipId: string) => void;
   onAddTrack: (type: "video" | "audio" | "graphics" | "text") => void;
   onRemoveTrack: (trackId: string) => void;
+  onReorderTracks?: (sourceTrackId: string, targetTrackId: string) => void;
   onToggleTrackMute: (trackId: string) => void;
   onToggleTrackVisible: (trackId: string) => void;
   onToggleTrackLock: (trackId: string) => void;
@@ -75,6 +77,7 @@ export function InteractiveTimeline({
   onDuplicateClip,
   onAddTrack,
   onRemoveTrack,
+  onReorderTracks,
   onToggleTrackMute,
   onToggleTrackVisible,
   onToggleTrackLock,
@@ -89,8 +92,10 @@ export function InteractiveTimeline({
   const timelineContainerRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
 
-  // Dragging State
+  // Clip Dragging State (2D: Time X + Target Track Y)
   const [draggingClipId, setDraggingClipId] = useState<string | null>(null);
+  const [draggingSourceTrackId, setDraggingSourceTrackId] = useState<string | null>(null);
+  const [targetDropTrackId, setTargetDropTrackId] = useState<string | null>(null);
   const [dragMode, setDragMode] = useState<DragMode>(null);
   const [dragStartX, setDragStartX] = useState(0);
   const [hasMovedDuringDrag, setHasMovedDuringDrag] = useState(false);
@@ -100,6 +105,10 @@ export function InteractiveTimeline({
   const [currentDragStart, setCurrentDragStart] = useState<number | null>(null);
   const [currentDragDuration, setCurrentDragDuration] = useState<number | null>(null);
   const [isScrubbingRuler, setIsScrubbingRuler] = useState(false);
+
+  // Track Header Layer Reordering State
+  const [headerDragSourceId, setHeaderDragSourceId] = useState<string | null>(null);
+  const [headerDragTargetId, setHeaderDragTargetId] = useState<string | null>(null);
 
   const duration = project.duration || 60;
   const timelineWidth = Math.max(1600, duration * zoomLevel + 400);
@@ -152,7 +161,7 @@ export function InteractiveTimeline({
     onSeek(time);
   };
 
-  // Global Mouse Move & Up Handler
+  // Global Mouse Move & Up Handler (2D cross-track drag)
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isScrubbingRuler && rulerRef.current) {
@@ -170,10 +179,19 @@ export function InteractiveTimeline({
         const deltaTime = deltaX / zoomLevel;
         const snapPoints = getSnapPoints(draggingClipId);
 
+        // Detect vertical track lane hover
         if (dragMode === "MOVE") {
           const rawNewStart = initialClipStart + deltaTime;
           const snappedStart = snapToPoints(rawNewStart, snapPoints);
           setCurrentDragStart(snappedStart);
+
+          // Find track lane under cursor
+          const element = document.elementFromPoint(e.clientX, e.clientY);
+          const lane = element?.closest("[data-track-lane-id]");
+          if (lane) {
+            const laneId = lane.getAttribute("data-track-lane-id");
+            if (laneId) setTargetDropTrackId(laneId);
+          }
         } else if (dragMode === "TRIM_LEFT") {
           const rawNewStart = Math.min(
             initialClipStart + initialClipDuration - 0.2,
@@ -197,7 +215,7 @@ export function InteractiveTimeline({
 
       if (draggingClipId && dragMode && hasMovedDuringDrag) {
         if (dragMode === "MOVE" && currentDragStart !== null) {
-          onMoveClip(draggingClipId, currentDragStart);
+          onMoveClip(draggingClipId, currentDragStart, targetDropTrackId || undefined);
         } else if (dragMode === "TRIM_LEFT" && currentDragStart !== null && currentDragDuration !== null) {
           const deltaOffset = currentDragStart - initialClipStart;
           onTrimClip(draggingClipId, currentDragStart, currentDragDuration, initialClipOffset + deltaOffset);
@@ -207,6 +225,8 @@ export function InteractiveTimeline({
       }
 
       setDraggingClipId(null);
+      setDraggingSourceTrackId(null);
+      setTargetDropTrackId(null);
       setDragMode(null);
       setCurrentDragStart(null);
       setCurrentDragDuration(null);
@@ -222,6 +242,7 @@ export function InteractiveTimeline({
   }, [
     isScrubbingRuler,
     draggingClipId,
+    targetDropTrackId,
     dragMode,
     dragStartX,
     hasMovedDuringDrag,
@@ -243,6 +264,7 @@ export function InteractiveTimeline({
   const startClipDrag = (
     e: React.MouseEvent,
     clip: TimelineClip,
+    trackId: string,
     mode: DragMode
   ) => {
     e.preventDefault();
@@ -260,6 +282,8 @@ export function InteractiveTimeline({
     }
 
     setDraggingClipId(clip.id);
+    setDraggingSourceTrackId(trackId);
+    setTargetDropTrackId(trackId);
     setDragMode(mode);
     setDragStartX(e.clientX);
     setHasMovedDuringDrag(false);
@@ -444,27 +468,62 @@ export function InteractiveTimeline({
         ref={timelineContainerRef}
         className="flex-1 flex overflow-x-auto overflow-y-auto relative bg-[#0a0c10]"
       >
-        {/* Left Fixed Track Headers Column (140px) */}
-        <div className="w-36 flex-shrink-0 sticky left-0 z-20 bg-[#12151d] border-r border-[#222733] shadow-lg flex flex-col">
+        {/* Left Fixed Track Headers Column (Layer Drag & Drop) */}
+        <div className="w-40 flex-shrink-0 sticky left-0 z-20 bg-[#12151d] border-r border-[#222733] shadow-lg flex flex-col">
           {/* Header corner */}
-          <div className="h-6 bg-[#161a23] border-b border-[#222733] px-2 flex items-center text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">
-            KANALLAR (TRACKS)
+          <div className="h-6 bg-[#161a23] border-b border-[#222733] px-2 flex items-center justify-between text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">
+            <span>KATMANLAR (LAYERS)</span>
+            <span className="text-[8px] text-slate-600">DRAG</span>
           </div>
 
-          {/* Track Headers */}
+          {/* Draggable Track Headers */}
           <div className="flex-1 flex flex-col">
-            {project.tracks.map((track) => {
+            {project.tracks.map((track, idx) => {
               const isVideo = track.type === "video";
               const isAudio = track.type === "audio";
               const isGraphics = track.type === "graphics";
               const isText = track.type === "text";
+              const isDragSource = headerDragSourceId === track.id;
+              const isDropTarget = headerDragTargetId === track.id;
 
               return (
                 <div
                   key={track.id}
-                  className="h-12 px-2 border-b border-[#222733] flex items-center justify-between bg-[#12151d] hover:bg-[#161a24] transition"
+                  draggable={!track.locked}
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("application/x-track-id", track.id);
+                    setHeaderDragSourceId(track.id);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    if (headerDragTargetId !== track.id) {
+                      setHeaderDragTargetId(track.id);
+                    }
+                  }}
+                  onDragLeave={() => {
+                    if (headerDragTargetId === track.id) {
+                      setHeaderDragTargetId(null);
+                    }
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const srcId = e.dataTransfer.getData("application/x-track-id");
+                    if (srcId && srcId !== track.id && onReorderTracks) {
+                      onReorderTracks(srcId, track.id);
+                    }
+                    setHeaderDragSourceId(null);
+                    setHeaderDragTargetId(null);
+                  }}
+                  onDragEnd={() => {
+                    setHeaderDragSourceId(null);
+                    setHeaderDragTargetId(null);
+                  }}
+                  className={`h-12 px-1.5 border-b border-[#222733] flex items-center justify-between bg-[#12151d] hover:bg-[#161a24] transition cursor-grab active:cursor-grabbing ${
+                    isDragSource ? "opacity-40" : ""
+                  } ${isDropTarget ? "border-t-2 border-t-[#00e5ff] bg-[#1e2738]" : ""}`}
                 >
                   <div className="flex items-center gap-1.5 min-w-0">
+                    <GripVertical className="w-3 h-3 text-slate-600 group-hover:text-slate-400 flex-shrink-0" />
                     <span
                       className="text-[10px] font-mono font-black px-1 py-0.5 rounded"
                       style={{
@@ -501,7 +560,7 @@ export function InteractiveTimeline({
                       className={`p-0.5 rounded text-[10px] transition ${
                         track.visible ? "text-slate-500 hover:text-slate-300" : "text-rose-400"
                       }`}
-                      title={track.visible ? "Kanalı Gizle" : "Kanalı Göster"}
+                      title={track.visible ? "Katmanı Gizle" : "Katmanı Göster"}
                     >
                       {track.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                     </button>
@@ -515,7 +574,7 @@ export function InteractiveTimeline({
                         className={`p-0.5 rounded text-[10px] transition ${
                           track.muted ? "text-rose-400" : "text-slate-500 hover:text-slate-300"
                         }`}
-                        title={track.muted ? "Sesi Aç" : "Kanalı Sustur (Mute)"}
+                        title={track.muted ? "Sesi Aç" : "Katmanı Sustur (Mute)"}
                       >
                         {track.muted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
                       </button>
@@ -529,7 +588,7 @@ export function InteractiveTimeline({
                       className={`p-0.5 rounded text-[10px] transition ${
                         track.locked ? "text-amber-400" : "text-slate-600 hover:text-slate-400"
                       }`}
-                      title={track.locked ? "Kilidi Aç" : "Kanalı Kilitle"}
+                      title={track.locked ? "Kilidi Aç" : "Katmanı Kilitle"}
                     >
                       {track.locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                     </button>
@@ -579,117 +638,126 @@ export function InteractiveTimeline({
 
           {/* Track Lanes */}
           <div className="flex-1 flex flex-col relative">
-            {project.tracks.map((track) => (
-              <div
-                key={track.id}
-                onClick={(e) => handleTrackLaneClick(e, track)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => handleTrackDrop(e, track)}
-                className="h-12 border-b border-[#1c212c] relative bg-[#0d1016] hover:bg-[#10141c] transition"
-              >
-                {/* Clips in Track */}
-                {track.clips.map((clip) => {
-                  const isSelected = clip.id === selectedClipId;
-                  const isDragging = clip.id === draggingClipId;
+            {project.tracks.map((track) => {
+              const isTargetTrack = draggingClipId !== null && targetDropTrackId === track.id;
 
-                  const displayStart =
-                    isDragging && currentDragStart !== null ? currentDragStart : clip.start;
-                  const displayDuration =
-                    isDragging && currentDragDuration !== null
-                      ? currentDragDuration
-                      : clip.duration;
+              return (
+                <div
+                  key={track.id}
+                  data-track-lane-id={track.id}
+                  onClick={(e) => handleTrackLaneClick(e, track)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => handleTrackDrop(e, track)}
+                  className={`h-12 border-b border-[#1c212c] relative transition ${
+                    isTargetTrack
+                      ? "bg-[#182338] ring-1 ring-inset ring-[#00e5ff]/50"
+                      : "bg-[#0d1016] hover:bg-[#10141c]"
+                  }`}
+                >
+                  {/* Clips in Track */}
+                  {track.clips.map((clip) => {
+                    const isSelected = clip.id === selectedClipId;
+                    const isDragging = clip.id === draggingClipId;
 
-                  const clipLeft = displayStart * zoomLevel;
-                  const clipWidth = Math.max(6, displayDuration * zoomLevel);
+                    const displayStart =
+                      isDragging && currentDragStart !== null ? currentDragStart : clip.start;
+                    const displayDuration =
+                      isDragging && currentDragDuration !== null
+                        ? currentDragDuration
+                        : clip.duration;
 
-                  const isGraphics = clip.type === "graphics";
-                  const isText = clip.type === "text";
-                  const isAudio = clip.type === "audio";
-                  const isVideo = clip.type === "video";
+                    const clipLeft = displayStart * zoomLevel;
+                    const clipWidth = Math.max(6, displayDuration * zoomLevel);
 
-                  const clipColor = isGraphics
-                    ? "#991B1B"
-                    : isText
-                    ? "#B45309"
-                    : isAudio
-                    ? "#065F46"
-                    : "#1D4ED8";
+                    const isGraphics = clip.type === "graphics";
+                    const isText = clip.type === "text";
+                    const isAudio = clip.type === "audio";
+                    const isVideo = clip.type === "video";
 
-                  return (
-                    <div
-                      key={clip.id}
-                      style={{
-                        left: `${clipLeft}px`,
-                        width: `${clipWidth}px`,
-                        backgroundColor: clipColor,
-                      }}
-                      onMouseDown={(e) => startClipDrag(e, clip, "MOVE")}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelectClip(clip.id);
-                      }}
-                      className={`absolute top-1 bottom-1 rounded-sm text-white flex items-center justify-between px-1.5 cursor-grab active:cursor-grabbing select-none transition-all overflow-hidden ${
-                        isSelected
-                          ? "ring-2 ring-[#00e5ff] z-10 shadow-lg border border-white/40"
-                          : "border border-black/40 hover:brightness-110"
-                      } ${isDragging ? "opacity-75 z-20" : ""}`}
-                    >
-                      {/* OpenCut Waveform Visualization for Audio Clips */}
-                      {isAudio && (
-                        <div className="absolute inset-0 opacity-40 overflow-hidden pointer-events-none flex items-center justify-around px-1 z-0">
-                          {Array.from({ length: Math.min(80, Math.floor(clipWidth / 4)) }).map((_, waveIdx) => {
-                            const h = 25 + Math.sin(waveIdx * 0.4) * 20 + ((waveIdx * 13) % 25);
-                            return (
+                    const clipColor = isGraphics
+                      ? "#991B1B"
+                      : isText
+                      ? "#B45309"
+                      : isAudio
+                      ? "#065F46"
+                      : "#1D4ED8";
+
+                    return (
+                      <div
+                        key={clip.id}
+                        style={{
+                          left: `${clipLeft}px`,
+                          width: `${clipWidth}px`,
+                          backgroundColor: clipColor,
+                        }}
+                        onMouseDown={(e) => startClipDrag(e, clip, track.id, "MOVE")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onSelectClip(clip.id);
+                        }}
+                        className={`absolute top-1 bottom-1 rounded-sm text-white flex items-center justify-between px-1.5 cursor-grab active:cursor-grabbing select-none transition-all overflow-hidden ${
+                          isSelected
+                            ? "ring-2 ring-[#00e5ff] z-10 shadow-lg border border-white/40"
+                            : "border border-black/40 hover:brightness-110"
+                        } ${isDragging ? "opacity-75 z-20 shadow-2xl scale-[1.01]" : ""}`}
+                      >
+                        {/* OpenCut Waveform Visualization for Audio Clips */}
+                        {isAudio && (
+                          <div className="absolute inset-0 opacity-40 overflow-hidden pointer-events-none flex items-center justify-around px-1 z-0">
+                            {Array.from({ length: Math.min(80, Math.floor(clipWidth / 4)) }).map((_, waveIdx) => {
+                              const h = 25 + Math.sin(waveIdx * 0.4) * 20 + ((waveIdx * 13) % 25);
+                              return (
+                                <div
+                                  key={waveIdx}
+                                  style={{ height: `${h}%` }}
+                                  className="w-0.5 bg-emerald-200 rounded-full"
+                                />
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* OpenCut Filmstrip Ribbon for Video Clips */}
+                        {isVideo && (
+                          <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none flex items-center justify-start gap-4 pl-1 z-0">
+                            {Array.from({ length: Math.min(30, Math.floor(clipWidth / 48)) }).map((_, fIdx) => (
                               <div
-                                key={waveIdx}
-                                style={{ height: `${h}%` }}
-                                className="w-0.5 bg-emerald-200 rounded-full"
-                              />
-                            );
-                          })}
+                                key={fIdx}
+                                className="w-9 h-7 border border-sky-300/40 rounded-xs bg-black/40 flex items-center justify-center"
+                              >
+                                <Film className="w-3 h-3 text-sky-200 opacity-70" />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Left Trim Handle */}
+                        <div
+                          onMouseDown={(e) => startClipDrag(e, clip, track.id, "TRIM_LEFT")}
+                          className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-l-sm z-10"
+                        />
+
+                        {/* Clip Title & Duration */}
+                        <div className="min-w-0 flex items-center gap-1 overflow-hidden pointer-events-none z-10">
+                          <span className="text-[10px] font-semibold truncate leading-none drop-shadow">
+                            {clip.name}
+                          </span>
+                          <span className="text-[8px] font-mono opacity-70 drop-shadow">
+                            {displayDuration.toFixed(1)}s
+                          </span>
                         </div>
-                      )}
 
-                      {/* OpenCut Filmstrip Ribbon for Video Clips */}
-                      {isVideo && (
-                        <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none flex items-center justify-start gap-4 pl-1 z-0">
-                          {Array.from({ length: Math.min(30, Math.floor(clipWidth / 48)) }).map((_, fIdx) => (
-                            <div
-                              key={fIdx}
-                              className="w-9 h-7 border border-sky-300/40 rounded-xs bg-black/40 flex items-center justify-center"
-                            >
-                              <Film className="w-3 h-3 text-sky-200 opacity-70" />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Left Trim Handle */}
-                      <div
-                        onMouseDown={(e) => startClipDrag(e, clip, "TRIM_LEFT")}
-                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-l-sm z-10"
-                      />
-
-                      {/* Clip Title & Duration */}
-                      <div className="min-w-0 flex items-center gap-1 overflow-hidden pointer-events-none z-10">
-                        <span className="text-[10px] font-semibold truncate leading-none drop-shadow">
-                          {clip.name}
-                        </span>
-                        <span className="text-[8px] font-mono opacity-70 drop-shadow">
-                          {displayDuration.toFixed(1)}s
-                        </span>
+                        {/* Right Trim Handle */}
+                        <div
+                          onMouseDown={(e) => startClipDrag(e, clip, track.id, "TRIM_RIGHT")}
+                          className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-r-sm z-10"
+                        />
                       </div>
-
-                      {/* Right Trim Handle */}
-                      <div
-                        onMouseDown={(e) => startClipDrag(e, clip, "TRIM_RIGHT")}
-                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-r-sm z-10"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            ))}
+                    );
+                  })}
+                </div>
+              );
+            })}
 
             {/* Playhead Scrubbing Line & Needle */}
             <div
