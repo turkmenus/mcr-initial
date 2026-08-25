@@ -98,4 +98,31 @@ describe("Renderer Worker Config", () => {
       fs.unlinkSync(outputPath);
     } catch {}
   }, 30000);
+
+  it("should successfully render an empty project with no clips without error 254", async () => {
+    const emptyProject: TimelineProject = {
+      id: "empty_proj_1",
+      name: "Empty Timeline",
+      duration: 1,
+      fps: 50,
+      tracks: [
+        {
+          id: "t_v1",
+          name: "V1",
+          type: "video",
+          clips: [],
+        },
+      ],
+    };
+
+    const { outputPath } = await renderTimelineToVideo(emptyProject, "broadcast-16:9", "/tmp/mcr_test_renders");
+    expect(fs.existsSync(outputPath)).toBe(true);
+    const stats = fs.statSync(outputPath);
+    expect(stats.size).toBeGreaterThan(500);
+
+    try {
+      fs.unlinkSync(outputPath);
+    } catch {}
+  }, 20000);
 });
+

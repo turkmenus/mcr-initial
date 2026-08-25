@@ -257,16 +257,25 @@ async function executeFfmpegRender(
     finalAudioMap = `${silentToneIdx}:a`;
   }
 
+  // Helper to ensure correct stream specifiers: input streams (e.g. 0:v, 1:a) must NOT have brackets, filter outputs ([voverlay_0]) MUST have brackets.
+  function formatMapSpecifier(spec: string): string {
+    if (/^\d+:[a-zA-Z0-9_]+$/.test(spec)) {
+      return spec;
+    }
+    return spec.startsWith("[") && spec.endsWith("]") ? spec : `[${spec}]`;
+  }
+
   // Construct FFmpeg command arguments
   const filterArgs = filterChains.length > 0 ? ["-filter_complex", filterChains.join(";")] : [];
-  const videoMap = lastVideoLayer.startsWith("[") ? lastVideoLayer : `[${lastVideoLayer}]`;
+  const videoMap = formatMapSpecifier(lastVideoLayer);
+  const audioMap = formatMapSpecifier(finalAudioMap);
 
   const ffmpegArgs = [
     "-y",
     ...inputs,
     ...filterArgs,
     "-map", videoMap,
-    "-map", finalAudioMap,
+    "-map", audioMap,
     "-t", `${totalDuration}`,
     ...encoderArgs,
     outputPath,
