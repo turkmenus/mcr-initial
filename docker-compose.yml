@@ -37,11 +37,12 @@ services:
     restart: unless-stopped
     ports:
       - "4001:4001"
+      - "5250:5250" # AMCP Port (Built-in Server or Gateway)
     environment:
       - PORT=4001
       - NODE_ENV=production
-      - CASPAR_HOST=casparcg
-      - CASPAR_PORT=5250
+      - CASPAR_HOST=${CASPAR_HOST:-127.0.0.1}
+      - CASPAR_PORT=${CASPAR_PORT:-5250}
       - DATABASE_URL=postgres://mcr_user:mcr_secure_password@postgres:5432/mcr_db
       - REDIS_URL=redis://redis:6379
     volumes:
@@ -109,21 +110,6 @@ services:
       - "6379:6379"
     volumes:
       - redis_data:/data
-    networks:
-      - mcr-net
-
-  # ==========================================
-  # 6. CasparCG Server 2.4 (Playout / NDI)
-  # ==========================================
-  casparcg:
-    image: casparcg/server:latest
-    container_name: mcr-casparcg
-    restart: unless-stopped
-    ports:
-      - "5250:5250"
-    volumes:
-      - ./infra/casparcg.config:/casparcg/casparcg.config
-      - ./templates:/casparcg/template
     networks:
       - mcr-net
 
