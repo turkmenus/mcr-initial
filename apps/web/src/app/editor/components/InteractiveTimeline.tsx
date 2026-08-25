@@ -5,7 +5,6 @@ import {
   Layers,
   ZoomIn,
   ZoomOut,
-  Maximize2,
   Scissors,
   Copy,
   Trash2,
@@ -22,13 +21,11 @@ import {
   Film,
   Music,
   Type,
-  Image as ImageIcon,
+  MousePointer,
   Sparkles,
   Sliders,
-  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import {
   TimelineProject,
@@ -84,7 +81,7 @@ export function InteractiveTimeline({
   onAddMarker,
   onRemoveMarker,
 }: InteractiveTimelineProps) {
-  const [zoomLevel, setZoomLevel] = useState(28); // pixels per second
+  const [zoomLevel, setZoomLevel] = useState(30); // pixels per second
   const [isSnappingEnabled, setIsSnappingEnabled] = useState(true);
   const [activeTool, setActiveTool] = useState<"select" | "razor">("select");
 
@@ -105,7 +102,7 @@ export function InteractiveTimeline({
   const duration = project.duration || 60;
   const timelineWidth = Math.max(1200, duration * zoomLevel);
 
-  // Calculate Snap Points (0s, playhead, and all clip boundaries)
+  // Snap Points
   const getSnapPoints = useCallback(
     (excludeClipId?: string): number[] => {
       if (!isSnappingEnabled) return [];
@@ -120,48 +117,36 @@ export function InteractiveTimeline({
       });
       return Array.from(points);
     },
-    [isSnappingEnabled, currentTime, project.tracks]
+    [project, currentTime, isSnappingEnabled]
   );
 
-  const findNearestSnap = (time: number, snapPoints: number[], thresholdSeconds = 0.25): number => {
-    let closest = time;
-    let minDiff = thresholdSeconds;
-    snapPoints.forEach((pt) => {
-      const diff = Math.abs(pt - time);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closest = pt;
+  const snapToPoints = useCallback(
+    (time: number, snapPoints: number[], thresholdPx = 8): number => {
+      if (!isSnappingEnabled) return Math.max(0, time);
+      const thresholdTime = thresholdPx / zoomLevel;
+      let closest = time;
+      let minDiff = thresholdTime;
+
+      for (const p of snapPoints) {
+        const diff = Math.abs(time - p);
+        if (diff < minDiff) {
+          minDiff = diff;
+          closest = p;
+        }
       }
-    });
-    return closest;
-  };
+      return Math.max(0, closest);
+    },
+    [zoomLevel, isSnappingEnabled]
+  );
 
-  // --- MOUSE DRAG & TRIM HANDLERS ---
-
-  const handleClipMouseDown = (
-    e: React.MouseEvent,
-    clip: TimelineClip,
-    track: Track,
-    mode: DragMode
-  ) => {
-    if (track.locked) return;
-    e.stopPropagation();
-
-    onSelectClip(clip.id);
-
-    if (activeTool === "razor") {
-      onSplitClip(clip.id, currentTime);
-      return;
-    }
-
-    setDraggingClipId(clip.id);
-    setDragMode(mode);
-    setDragStartX(e.clientX);
-    setInitialClipStart(clip.start);
-    setInitialClipDuration(clip.duration);
-    setInitialClipOffset(clip.offset ?? 0);
-    setCurrentDragStart(clip.start);
-    setCurrentDragDuration(clip.duration);
+  // Ruler Scrubbing
+  const handleRulerMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsScrubbingRuler(true);
+    const rect = rulerRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const clickX = e.clientX - rect.left;
+    const time = Math.max(0, Math.min(duration, clickX / zoomLevel));
+    onSeek(time);
   };
 
   useEffect(() => {
@@ -169,66 +154,46 @@ export function InteractiveTimeline({
       if (isScrubbingRuler && rulerRef.current) {
         const rect = rulerRef.current.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
-        const newTime = Math.max(0, Math.min(duration, clickX / zoomLevel));
-        onSeek(newTime);
-        return;
+        const time = Math.max(0, Math.min(duration, clickX / zoomLevel));
+        onSeek(time);
       }
 
-      if (!draggingClipId || !dragMode) return;
+      if (draggingClipId && dragMode) {
+        const deltaX = e.clientX - dragStartX;
+        const deltaTime = deltaX / zoomLevel;
+        const snapPoints = getSnapPoints(draggingClipId);
 
-      const deltaPixels = e.clientX - dragStartX;
-      const deltaTime = deltaPixels / zoomLevel;
-      const snapPoints = getSnapPoints(draggingClipId);
-
-      if (dragMode === "MOVE") {
-        let proposedStart = Math.max(0, initialClipStart + deltaTime);
-        if (isSnappingEnabled) {
-          // Snap start or snap end
-          const snappedStart = findNearestSnap(proposedStart, snapPoints);
-          if (snappedStart !== proposedStart) {
-            proposedStart = snappedStart;
-          } else {
-            const snappedEnd = findNearestSnap(proposedStart + initialClipDuration, snapPoints);
-            if (snappedEnd !== proposedStart + initialClipDuration) {
-              proposedStart = Math.max(0, snappedEnd - initialClipDuration);
-            }
-          }
+        if (dragMode === "MOVE") {
+          const rawNewStart = initialClipStart + deltaTime;
+          const snappedStart = snapToPoints(rawNewStart, snapPoints);
+          setCurrentDragStart(snappedStart);
+        } else if (dragMode === "TRIM_LEFT") {
+          const rawNewStart = Math.min(
+            initialClipStart + initialClipDuration - 0.2,
+            initialClipStart + deltaTime
+          );
+          const snappedStart = snapToPoints(rawNewStart, snapPoints);
+          const newDur = initialClipDuration - (snappedStart - initialClipStart);
+          setCurrentDragStart(snappedStart);
+          setCurrentDragDuration(Math.max(0.2, newDur));
+        } else if (dragMode === "TRIM_RIGHT") {
+          const rawNewEnd = initialClipStart + initialClipDuration + deltaTime;
+          const snappedEnd = snapToPoints(rawNewEnd, snapPoints);
+          const newDur = Math.max(0.2, snappedEnd - initialClipStart);
+          setCurrentDragDuration(newDur);
         }
-        setCurrentDragStart(proposedStart);
-      } else if (dragMode === "TRIM_LEFT") {
-        let proposedStart = Math.max(0, initialClipStart + deltaTime);
-        if (isSnappingEnabled) {
-          proposedStart = findNearestSnap(proposedStart, snapPoints);
-        }
-        const deltaStart = proposedStart - initialClipStart;
-        const proposedDuration = Math.max(0.2, initialClipDuration - deltaStart);
-        const proposedOffset = Math.max(0, initialClipOffset + deltaStart);
-
-        setCurrentDragStart(proposedStart);
-        setCurrentDragDuration(proposedDuration);
-      } else if (dragMode === "TRIM_RIGHT") {
-        let proposedDuration = Math.max(0.2, initialClipDuration + deltaTime);
-        const proposedEnd = initialClipStart + proposedDuration;
-        if (isSnappingEnabled) {
-          const snappedEnd = findNearestSnap(proposedEnd, snapPoints);
-          proposedDuration = Math.max(0.2, snappedEnd - initialClipStart);
-        }
-        setCurrentDragDuration(proposedDuration);
       }
     };
 
     const handleMouseUp = () => {
-      if (isScrubbingRuler) {
-        setIsScrubbingRuler(false);
-      }
+      if (isScrubbingRuler) setIsScrubbingRuler(false);
 
       if (draggingClipId && dragMode) {
         if (dragMode === "MOVE" && currentDragStart !== null) {
           onMoveClip(draggingClipId, currentDragStart);
         } else if (dragMode === "TRIM_LEFT" && currentDragStart !== null && currentDragDuration !== null) {
-          const deltaStart = currentDragStart - initialClipStart;
-          const newOffset = Math.max(0, initialClipOffset + deltaStart);
-          onTrimClip(draggingClipId, currentDragStart, currentDragDuration, newOffset);
+          const deltaOffset = currentDragStart - initialClipStart;
+          onTrimClip(draggingClipId, currentDragStart, currentDragDuration, initialClipOffset + deltaOffset);
         } else if (dragMode === "TRIM_RIGHT" && currentDragDuration !== null) {
           onTrimClip(draggingClipId, initialClipStart, currentDragDuration, initialClipOffset);
         }
@@ -258,220 +223,201 @@ export function InteractiveTimeline({
     currentDragDuration,
     zoomLevel,
     duration,
-    isSnappingEnabled,
     getSnapPoints,
+    snapToPoints,
     onSeek,
     onMoveClip,
     onTrimClip,
   ]);
 
-  // Handle Ruler Click / Drag
-  const handleRulerMouseDown = (e: React.MouseEvent) => {
-    if (!rulerRef.current) return;
-    const rect = rulerRef.current.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const newTime = Math.max(0, Math.min(duration, clickX / zoomLevel));
-    onSeek(newTime);
-    setIsScrubbingRuler(true);
+  // Clip Interaction Initiator
+  const startClipDrag = (
+    e: React.MouseEvent,
+    clip: TimelineClip,
+    mode: DragMode
+  ) => {
+    e.stopPropagation();
+
+    if (activeTool === "razor") {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const splitTime = clip.start + clickX / zoomLevel;
+      onSplitClip(clip.id, splitTime);
+      return;
+    }
+
+    onSelectClip(clip.id);
+    setDraggingClipId(clip.id);
+    setDragMode(mode);
+    setDragStartX(e.clientX);
+    setInitialClipStart(clip.start);
+    setInitialClipDuration(clip.duration);
+    setInitialClipOffset(clip.offset ?? 0);
+    setCurrentDragStart(clip.start);
+    setCurrentDragDuration(clip.duration);
   };
 
   const selectedClip = project.tracks.flatMap((t) => t.clips).find((c) => c.id === selectedClipId);
 
   return (
-    <div className="flex flex-col bg-card rounded-2xl border border-border shadow-2xl overflow-hidden select-none">
-      {/* Timeline Controls Toolbar */}
-      <div className="flex flex-wrap items-center justify-between p-3 border-b border-border bg-secondary/30 gap-3 text-xs">
-        {/* Left: Tools */}
+    <div className="flex-1 flex flex-col bg-[#0b0e14] border border-[#1e2538] rounded-lg overflow-hidden select-none shadow-xl">
+      {/* Timeline Toolbar */}
+      <div className="h-9 px-3 bg-[#121722] border-b border-[#1e2538] flex items-center justify-between">
+        {/* Left Tools */}
         <div className="flex items-center gap-1.5">
-          <Button
-            variant={activeTool === "select" ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTool("select")}
-            className="h-8 gap-1.5 font-bold"
-            title="Seçim Aracı (V)"
-          >
-            <Sliders className="w-3.5 h-3.5" />
-            <span>Seç (V)</span>
-          </Button>
+          {/* Tool Modes */}
+          <div className="flex items-center bg-[#0b0e14] p-0.5 rounded border border-[#1e2538]">
+            <button
+              onClick={() => setActiveTool("select")}
+              className={`p-1 px-2 rounded text-[11px] font-semibold flex items-center gap-1 transition ${
+                activeTool === "select"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Seçim Aracı (V)"
+            >
+              <MousePointer className="w-3 h-3" />
+              <span>Seç (V)</span>
+            </button>
+            <button
+              onClick={() => setActiveTool("razor")}
+              className={`p-1 px-2 rounded text-[11px] font-semibold flex items-center gap-1 transition ${
+                activeTool === "razor"
+                  ? "bg-sky-600 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Kesme / Razor Aracı (C)"
+            >
+              <Scissors className="w-3 h-3" />
+              <span>Kes (C)</span>
+            </button>
+          </div>
 
-          <Button
-            variant={activeTool === "razor" ? "destructive" : "ghost"}
-            size="sm"
-            onClick={() => setActiveTool("razor")}
-            className="h-8 gap-1.5 font-bold text-amber-400 hover:text-amber-300"
-            title="Klip Kesme / Bölme Aracı (C)"
-          >
-            <Scissors className="w-3.5 h-3.5" />
-            <span>Klip Kes (C)</span>
-          </Button>
+          <div className="h-4 w-px bg-[#1e2538]" />
 
-          <div className="h-5 w-px bg-border mx-1" />
-
-          <Button
-            variant="ghost"
-            size="sm"
+          {/* Quick Actions */}
+          <button
             onClick={() => selectedClipId && onSplitClip(selectedClipId, currentTime)}
             disabled={!selectedClipId}
-            className="h-8 gap-1.5 font-bold text-slate-300"
-            title="Seçili Klibi Oynatıcı Çizgisinde Böl"
+            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-[#1e2538] disabled:opacity-30 transition"
+            title="Playhead Konumunda Böl (Ctrl+K)"
           >
-            <Scissors className="w-3.5 h-3.5 text-amber-400" />
-            <span>Böl</span>
-          </Button>
+            <Scissors className="w-3.5 h-3.5" />
+          </button>
 
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             onClick={() => selectedClipId && onDuplicateClip(selectedClipId)}
             disabled={!selectedClipId}
-            className="h-8 gap-1.5 font-bold text-slate-300"
-            title="Seçili Klibi Çoğalt (Ctrl+D)"
+            className="p-1.5 rounded text-slate-400 hover:text-slate-200 hover:bg-[#1e2538] disabled:opacity-30 transition"
+            title="Klibi Çoğalt (Ctrl+D)"
           >
-            <Copy className="w-3.5 h-3.5 text-sky-400" />
-            <span>Çoğalt</span>
-          </Button>
+            <Copy className="w-3.5 h-3.5" />
+          </button>
 
-          <Button
-            variant="ghost"
-            size="sm"
+          <button
             onClick={() => selectedClipId && onDeleteClip(selectedClipId)}
             disabled={!selectedClipId}
-            className="h-8 gap-1.5 font-bold text-rose-400 hover:text-rose-300 hover:bg-rose-950/40"
-            title="Seçili Klibi Sil (Delete / Backspace)"
+            className="p-1.5 rounded text-slate-400 hover:text-rose-400 hover:bg-[#1e2538] disabled:opacity-30 transition"
+            title="Seçili Klibi Sil (Del)"
           >
             <Trash2 className="w-3.5 h-3.5" />
-            <span>Sil</span>
-          </Button>
+          </button>
 
-          <div className="h-5 w-px bg-border mx-1" />
+          <button
+            onClick={() => onAddMarker(currentTime)}
+            className="p-1.5 rounded text-slate-400 hover:text-amber-400 hover:bg-[#1e2538] transition"
+            title="Marker Ekle (M)"
+          >
+            <BookmarkPlus className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="h-4 w-px bg-[#1e2538]" />
 
           {/* Snapping Toggle */}
-          <Button
-            variant={isSnappingEnabled ? "secondary" : "ghost"}
-            size="sm"
+          <button
             onClick={() => setIsSnappingEnabled(!isSnappingEnabled)}
-            className={`h-8 gap-1.5 font-bold ${
-              isSnappingEnabled ? "text-sky-400 border border-sky-500/40" : "text-muted-foreground"
+            className={`p-1 px-2 rounded text-[11px] font-semibold flex items-center gap-1 border transition ${
+              isSnappingEnabled
+                ? "bg-sky-500/10 text-sky-400 border-sky-500/30"
+                : "bg-transparent text-slate-500 border-transparent hover:text-slate-300"
             }`}
             title="Manyetik Yapışma (S)"
           >
-            <Magnet className="w-3.5 h-3.5" />
+            <Magnet className="w-3 h-3" />
             <span>Snap (S)</span>
-          </Button>
-
-          {/* Add Marker */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onAddMarker(currentTime)}
-            className="h-8 gap-1.5 font-bold text-slate-300"
-            title="Oynatıcı Zamanına İşaretçi Ekle (M)"
-          >
-            <BookmarkPlus className="w-3.5 h-3.5 text-amber-400" />
-            <span>İşaretçi (M)</span>
-          </Button>
+          </button>
         </div>
 
-        {/* Right: Add Track & Zoom Controls */}
-        <div className="flex items-center gap-3">
-          {/* Add Track dropdown */}
-          <div className="flex items-center gap-1 bg-secondary/80 rounded-lg p-0.5 border border-border">
-            <span className="text-[11px] font-bold text-muted-foreground px-2">Katman:</span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onAddTrack("video")}
-              className="h-6 px-1.5 text-[11px] font-bold text-sky-400 hover:bg-sky-950/60"
-              title="Yeni Video Katmanı (V) Ekle"
-            >
-              +V
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onAddTrack("audio")}
-              className="h-6 px-1.5 text-[11px] font-bold text-emerald-400 hover:bg-emerald-950/60"
-              title="Yeni Ses Katmanı (A) Ekle"
-            >
-              +A
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onAddTrack("graphics")}
-              className="h-6 px-1.5 text-[11px] font-bold text-rose-400 hover:bg-rose-950/60"
-              title="Yeni Grafik Katmanı (G) Ekle"
-            >
-              +G
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onAddTrack("text")}
-              className="h-6 px-1.5 text-[11px] font-bold text-amber-400 hover:bg-amber-950/60"
-              title="Yeni Metin Katmanı (T) Ekle"
-            >
-              +T
-            </Button>
-          </div>
-
-          <div className="h-5 w-px bg-border" />
-
+        {/* Right Tools: Zoom & Track Adders */}
+        <div className="flex items-center gap-2">
           {/* Zoom Slider */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setZoomLevel((z) => Math.max(10, z - 6))}
-              className="h-7 w-7"
+          <div className="flex items-center gap-1.5 text-slate-400">
+            <button
+              onClick={() => setZoomLevel((z) => Math.max(10, z - 5))}
+              className="p-1 hover:text-slate-200 transition"
+              title="Uzaklaş (-)"
             >
-              <ZoomOut className="w-3.5 h-3.5 text-muted-foreground" />
-            </Button>
-
+              <ZoomOut className="w-3.5 h-3.5" />
+            </button>
             <div className="w-20">
               <Slider
-                value={zoomLevel}
+                value={[zoomLevel]}
                 min={10}
-                max={70}
+                max={100}
                 step={2}
-                onValueChange={(val) => setZoomLevel(val)}
+                onValueChange={(val) => setZoomLevel(val[0])}
               />
             </div>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setZoomLevel((z) => Math.min(70, z + 6))}
-              className="h-7 w-7"
+            <button
+              onClick={() => setZoomLevel((z) => Math.min(100, z + 5))}
+              className="p-1 hover:text-slate-200 transition"
+              title="Yakınlaş (+)"
             >
-              <ZoomIn className="w-3.5 h-3.5 text-muted-foreground" />
-            </Button>
+              <ZoomIn className="w-3.5 h-3.5" />
+            </button>
+          </div>
 
-            <Badge variant="outline" className="font-mono text-[10px] w-14 justify-center">
-              {zoomLevel}px/s
-            </Badge>
+          <div className="h-4 w-px bg-[#1e2538]" />
+
+          {/* Add Track */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => onAddTrack("video")}
+              className="px-2 py-0.5 text-[10px] font-semibold rounded bg-[#161b24] hover:bg-[#1e2538] text-sky-400 border border-[#262d3d] transition"
+            >
+              + Video
+            </button>
+            <button
+              onClick={() => onAddTrack("audio")}
+              className="px-2 py-0.5 text-[10px] font-semibold rounded bg-[#161b24] hover:bg-[#1e2538] text-emerald-400 border border-[#262d3d] transition"
+            >
+              + Audio
+            </button>
+            <button
+              onClick={() => onAddTrack("graphics")}
+              className="px-2 py-0.5 text-[10px] font-semibold rounded bg-[#161b24] hover:bg-[#1e2538] text-rose-400 border border-[#262d3d] transition"
+            >
+              + OGraf
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Main Multi-Track Scrollable Work Area */}
+      {/* Main Track & Timeline Area */}
       <div
         ref={timelineContainerRef}
-        className="relative flex overflow-x-auto overflow-y-hidden max-h-[380px] bg-[#0A0E18]"
+        className="flex-1 flex overflow-x-auto overflow-y-auto relative bg-[#090c12]"
+        onClick={() => onSelectClip(null)}
       >
-        {/* Left Fixed: Track Headers Column (Width: 200px) */}
-        <div className="sticky left-0 z-30 w-52 flex-shrink-0 bg-card/95 backdrop-blur border-r border-border flex flex-col shadow-2xl">
-          {/* Header Corner Space matching Ruler */}
-          <div className="h-9 border-b border-border px-3 flex items-center justify-between text-xs font-bold text-muted-foreground uppercase tracking-wider bg-secondary/50">
-            <div className="flex items-center gap-1.5">
-              <Layers className="w-3.5 h-3.5 text-sky-400" />
-              <span>KATMANLAR</span>
-            </div>
-            <span className="text-[10px] font-mono">{project.tracks.length} Kanal</span>
+        {/* Left Fixed Track Headers */}
+        <div className="w-44 flex-shrink-0 sticky left-0 z-30 bg-[#0e1217] border-r border-[#1e2538] shadow-md flex flex-col">
+          {/* Empty Header corner aligned with ruler */}
+          <div className="h-7 bg-[#121722] border-b border-[#1e2538] flex items-center px-2 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+            Kanallar
           </div>
 
-          {/* Track Headers */}
-          <div className="space-y-2 py-2">
+          {/* Track Headers List */}
+          <div className="flex-1 flex flex-col">
             {project.tracks.map((track) => {
               const isVideo = track.type === "video";
               const isAudio = track.type === "audio";
@@ -481,73 +427,77 @@ export function InteractiveTimeline({
               return (
                 <div
                   key={track.id}
-                  className="h-16 px-3 flex items-center justify-between border-b border-border/40 hover:bg-secondary/40 transition group"
+                  className="h-14 px-2 border-b border-[#1e2538] flex items-center justify-between bg-[#0e1217] hover:bg-[#131822] transition"
                 >
-                  <div className="flex items-center gap-2 min-w-0 pr-2">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <div
-                      className={`w-7 h-7 rounded-lg flex items-center justify-center font-bold text-xs flex-shrink-0 shadow ${
-                        isGraphics
-                          ? "bg-rose-500/20 text-rose-400 border border-rose-500/40"
+                      className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold"
+                      style={{
+                        backgroundColor: isGraphics
+                          ? "rgba(244,63,94,0.15)"
                           : isText
-                          ? "bg-amber-500/20 text-amber-400 border border-amber-500/40"
+                          ? "rgba(245,158,11,0.15)"
                           : isVideo
-                          ? "bg-sky-500/20 text-sky-400 border border-sky-500/40"
-                          : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
-                      }`}
+                          ? "rgba(56,189,248,0.15)"
+                          : "rgba(52,211,153,0.15)",
+                        color: isGraphics
+                          ? "#F43F5E"
+                          : isText
+                          ? "#F59E0B"
+                          : isVideo
+                          ? "#38BDF8"
+                          : "#34D399",
+                      }}
                     >
-                      {isGraphics ? "G" : isText ? "T" : isVideo ? "V" : "A"}
+                      {track.name.slice(0, 2)}
                     </div>
-
-                    <div className="min-w-0">
-                      <div className="text-xs font-bold text-slate-200 truncate">{track.name}</div>
-                      <div className="text-[10px] font-mono text-muted-foreground">
-                        {track.clips.length} Klip
-                      </div>
-                    </div>
+                    <span className="text-[11px] font-semibold text-slate-300 truncate">
+                      {track.name}
+                    </span>
                   </div>
 
-                  {/* Track Controls: Mute, Visibility, Lock */}
-                  <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition">
-                    {/* Mute (for Video/Audio) */}
-                    {(isVideo || isAudio) && (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onToggleTrackMute(track.id)}
-                        className={`h-6 w-6 rounded-md ${
-                          track.muted ? "bg-rose-500/20 text-rose-400" : "text-muted-foreground hover:text-white"
+                  {/* Track Controls */}
+                  <div className="flex items-center gap-0.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleTrackVisible(track.id);
+                      }}
+                      className={`p-1 rounded text-[10px] transition ${
+                        track.visible ? "text-slate-400 hover:text-slate-200" : "text-rose-400"
+                      }`}
+                      title={track.visible ? "Kanalı Gizle" : "Kanalı Göster"}
+                    >
+                      {track.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                    </button>
+
+                    {isAudio && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleTrackMute(track.id);
+                        }}
+                        className={`p-1 rounded text-[10px] transition ${
+                          track.muted ? "text-rose-400" : "text-slate-400 hover:text-slate-200"
                         }`}
-                        title={track.muted ? "Sesi Aç" : "Sesi Kapat (Mute)"}
+                        title={track.muted ? "Sesi Aç" : "Kanalı Sustur (Mute)"}
                       >
                         {track.muted ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                      </Button>
+                      </button>
                     )}
 
-                    {/* Visibility */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onToggleTrackVisible(track.id)}
-                      className={`h-6 w-6 rounded-md ${
-                        track.visible === false ? "bg-amber-500/20 text-amber-400" : "text-muted-foreground hover:text-white"
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onToggleTrackLock(track.id);
+                      }}
+                      className={`p-1 rounded text-[10px] transition ${
+                        track.locked ? "text-amber-400" : "text-slate-500 hover:text-slate-300"
                       }`}
-                      title={track.visible === false ? "Katmanı Göster" : "Katmanı Gizle"}
-                    >
-                      {track.visible === false ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                    </Button>
-
-                    {/* Lock */}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => onToggleTrackLock(track.id)}
-                      className={`h-6 w-6 rounded-md ${
-                        track.locked ? "bg-rose-500/20 text-rose-400" : "text-muted-foreground hover:text-white"
-                      }`}
-                      title={track.locked ? "Kilidi Aç" : "Katmanı Kilitle"}
+                      title={track.locked ? "Kilidi Aç" : "Kanalı Kilitle"}
                     >
                       {track.locked ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                    </Button>
+                    </button>
                   </div>
                 </div>
               );
@@ -555,203 +505,159 @@ export function InteractiveTimeline({
           </div>
         </div>
 
-        {/* Right Scrollable: Time Ruler + Multi-track Clips Area */}
-        <div className="flex-1 flex flex-col relative" style={{ width: `${timelineWidth}px` }}>
-          {/* Time Ruler (Height: 36px) */}
+        {/* Right Scrollable Timeline Canvas */}
+        <div
+          className="flex-1 flex flex-col relative"
+          style={{ width: `${timelineWidth}px` }}
+        >
+          {/* Time Ruler */}
           <div
             ref={rulerRef}
             onMouseDown={handleRulerMouseDown}
-            className="relative h-9 border-b border-border/80 bg-[#070A12] cursor-pointer select-none font-mono text-[10px] text-muted-foreground flex items-center"
+            className="h-7 bg-[#121722] border-b border-[#1e2538] sticky top-0 z-20 cursor-ew-resize select-none flex items-end overflow-hidden"
           >
-            {/* Seconds and Frame Ticks */}
-            {Array.from({ length: Math.ceil(duration) + 1 }).map((_, sec) => {
-              const isMajor = sec % 5 === 0;
-              return (
-                <div
-                  key={sec}
-                  className="absolute top-0 bottom-0 flex flex-col justify-between pointer-events-none"
-                  style={{ left: `${sec * zoomLevel}px` }}
-                >
-                  <div
-                    className={`border-l ${
-                      isMajor ? "border-slate-400 h-3.5" : "border-slate-700/60 h-2"
-                    }`}
-                  />
-                  {isMajor && (
-                    <span className="text-[9px] font-bold text-slate-400 pl-1 pb-0.5 leading-none">
-                      {sec}s
-                    </span>
-                  )}
-                </div>
-              );
-            })}
+            {renderRulerTicks(duration, zoomLevel)}
 
-            {/* Markers on Ruler */}
-            {project.markers?.map((marker) => (
+            {/* Markers */}
+            {(project.markers || []).map((m) => (
               <div
-                key={marker.id}
+                key={m.id}
+                style={{ left: `${m.time * zoomLevel}px` }}
+                className="absolute top-0 bottom-0 flex flex-col items-center pointer-events-auto cursor-pointer group"
                 onClick={(e) => {
                   e.stopPropagation();
-                  onSeek(marker.time);
+                  onSeek(m.time);
                 }}
-                className="absolute top-0 z-20 flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold text-white shadow-md cursor-pointer group"
-                style={{
-                  left: `${marker.time * zoomLevel}px`,
-                  backgroundColor: marker.color || "#38BDF8",
+                onDoubleClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveMarker(m.id);
                 }}
-                title={`${marker.label} (${marker.time.toFixed(1)}s)`}
+                title={`${m.label || "Marker"} (${m.time.toFixed(2)}s) — Çift tıkla sil`}
               >
-                <span>{marker.label}</span>
-                <span
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onRemoveMarker(marker.id);
-                  }}
-                  className="hidden group-hover:inline opacity-70 hover:opacity-100 ml-1 text-[8px]"
-                >
-                  ×
-                </span>
+                <div
+                  className="w-2.5 h-2.5 rotate-45 rounded-sm shadow-sm"
+                  style={{ backgroundColor: m.color || "#F59E0B" }}
+                />
               </div>
             ))}
           </div>
 
-          {/* Red Playhead Line across all tracks */}
-          <div
-            className="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-40 pointer-events-none shadow-[0_0_8px_rgba(244,63,94,0.8)]"
-            style={{ left: `${currentTime * zoomLevel}px` }}
-          >
-            {/* Playhead Handle Bookmark */}
-            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-3.5 h-4 bg-rose-500 rounded-b-md shadow flex items-center justify-center">
-              <div className="w-1 h-1 bg-white rounded-full" />
-            </div>
-          </div>
-
-          {/* Tracks and Clips Canvas */}
-          <div className="space-y-2 py-2">
+          {/* Tracks Lanes Container */}
+          <div className="flex-1 flex flex-col relative">
             {project.tracks.map((track) => (
               <div
                 key={track.id}
-                className={`relative h-16 rounded-xl border border-border/40 transition-colors ${
-                  track.locked
-                    ? "bg-secondary/20 opacity-60"
-                    : track.visible === false
-                    ? "bg-secondary/10 opacity-40"
-                    : "bg-[#0E1424]/60 hover:bg-[#0E1424]/90"
-                }`}
+                className="h-14 border-b border-[#1e2538]/60 relative bg-[#090c12] hover:bg-[#0d1017] transition"
               >
-                {/* Clips Container */}
+                {/* Clips in this track */}
                 {track.clips.map((clip) => {
                   const isSelected = clip.id === selectedClipId;
-                  const isBeingDragged = clip.id === draggingClipId;
+                  const isDragging = clip.id === draggingClipId;
 
-                  const clipStart = isBeingDragged && currentDragStart !== null ? currentDragStart : clip.start;
-                  const clipDuration = isBeingDragged && currentDragDuration !== null ? currentDragDuration : clip.duration;
+                  const displayStart =
+                    isDragging && currentDragStart !== null ? currentDragStart : clip.start;
+                  const displayDuration =
+                    isDragging && currentDragDuration !== null
+                      ? currentDragDuration
+                      : clip.duration;
 
-                  const clipLeft = clipStart * zoomLevel;
-                  const clipWidth = Math.max(16, clipDuration * zoomLevel);
+                  const clipLeft = displayStart * zoomLevel;
+                  const clipWidth = Math.max(8, displayDuration * zoomLevel);
 
-                  const isVideo = clip.type === "video";
-                  const isAudio = clip.type === "audio";
                   const isGraphics = clip.type === "graphics";
                   const isText = clip.type === "text";
-                  const isImage = clip.type === "image";
+                  const isAudio = clip.type === "audio";
 
-                  const clipBg =
-                    clip.color ||
-                    (isGraphics
-                      ? "#DC2626"
-                      : isText
-                      ? "#D97706"
-                      : isVideo
-                      ? "#0284C7"
-                      : isAudio
-                      ? "#059669"
-                      : "#7C3AED");
+                  const baseBg = isGraphics
+                    ? "#991B1B"
+                    : isText
+                    ? "#B45309"
+                    : isAudio
+                    ? "#065F46"
+                    : "#1E40AF";
 
                   return (
                     <div
                       key={clip.id}
-                      onMouseDown={(e) => handleClipMouseDown(e, clip, track, "MOVE")}
-                      className={`absolute top-2 bottom-2 rounded-lg text-white shadow-lg cursor-move flex flex-col justify-between overflow-hidden transition-shadow border select-none group ${
-                        isSelected
-                          ? "ring-2 ring-white border-white scale-[1.005] z-20"
-                          : "border-white/10 hover:border-white/40 hover:brightness-110 z-10"
-                      }`}
                       style={{
                         left: `${clipLeft}px`,
                         width: `${clipWidth}px`,
-                        backgroundColor: clipBg,
+                        backgroundColor: baseBg,
                       }}
+                      onMouseDown={(e) => startClipDrag(e, clip, "MOVE")}
+                      className={`absolute top-1.5 bottom-1.5 rounded text-white flex items-center justify-between px-2 cursor-pointer select-none transition-shadow ${
+                        isSelected
+                          ? "ring-2 ring-sky-400 z-10 shadow-lg"
+                          : "border border-black/30 hover:brightness-110"
+                      } ${isDragging ? "opacity-80" : ""}`}
                     >
                       {/* Left Trim Handle */}
-                      {!track.locked && (
-                        <div
-                          onMouseDown={(e) => handleClipMouseDown(e, clip, track, "TRIM_LEFT")}
-                          className="absolute left-0 top-0 bottom-0 w-2.5 bg-white/0 hover:bg-white/40 cursor-ew-resize z-30 transition flex items-center justify-center group/trimL"
-                          title="Sol Giriş Noktasını Kırp (Trim In)"
-                        >
-                          <div className="w-0.5 h-4 bg-white/60 rounded" />
-                        </div>
-                      )}
+                      <div
+                        onMouseDown={(e) => startClipDrag(e, clip, "TRIM_LEFT")}
+                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 rounded-l"
+                      />
 
-                      {/* Clip Body Content & Thumbnails / Waveforms */}
-                      <div className="px-3 pt-1 flex items-center justify-between text-xs font-bold leading-none pointer-events-none truncate">
-                        <div className="flex items-center gap-1.5 truncate">
-                          {isGraphics && <Sparkles className="w-3 h-3 text-rose-200 flex-shrink-0" />}
-                          {isText && <Type className="w-3 h-3 text-amber-200 flex-shrink-0" />}
-                          {isVideo && <Film className="w-3 h-3 text-sky-200 flex-shrink-0" />}
-                          {isAudio && <Music className="w-3 h-3 text-emerald-200 flex-shrink-0" />}
-                          {isImage && <ImageIcon className="w-3 h-3 text-purple-200 flex-shrink-0" />}
-                          <span className="truncate">{clip.name}</span>
-                        </div>
-
-                        <span className="text-[10px] font-mono opacity-80 flex-shrink-0 ml-1">
-                          {clipDuration.toFixed(1)}s
+                      {/* Clip Label */}
+                      <div className="min-w-0 flex items-center gap-1.5 overflow-hidden pointer-events-none">
+                        <span className="text-[11px] font-semibold truncate leading-tight">
+                          {clip.name}
+                        </span>
+                        <span className="text-[9px] opacity-75 font-mono">
+                          {displayDuration.toFixed(1)}s
                         </span>
                       </div>
 
-                      {/* Waveform / Visual Bars Pattern */}
-                      <div className="h-3 w-full opacity-30 flex items-end gap-0.5 px-2 pb-1 pointer-events-none overflow-hidden">
-                        {isAudio ? (
-                          Array.from({ length: Math.min(60, Math.floor(clipWidth / 4)) }).map((_, i) => (
-                            <div
-                              key={i}
-                              className="w-0.5 bg-white rounded-full"
-                              style={{ height: `${20 + ((i * 37) % 80)}%` }}
-                            />
-                          ))
-                        ) : (
-                          <div className="w-full h-1 bg-white/40 rounded-full" />
-                        )}
-                      </div>
-
                       {/* Right Trim Handle */}
-                      {!track.locked && (
-                        <div
-                          onMouseDown={(e) => handleClipMouseDown(e, clip, track, "TRIM_RIGHT")}
-                          className="absolute right-0 top-0 bottom-0 w-2.5 bg-white/0 hover:bg-white/40 cursor-ew-resize z-30 transition flex items-center justify-center group/trimR"
-                          title="Sağ Çıkış Noktasını Kırp (Trim Out)"
-                        >
-                          <div className="w-0.5 h-4 bg-white/60 rounded" />
-                        </div>
-                      )}
+                      <div
+                        onMouseDown={(e) => startClipDrag(e, clip, "TRIM_RIGHT")}
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 rounded-r"
+                      />
                     </div>
                   );
                 })}
               </div>
             ))}
+
+            {/* Playhead Line & Needle */}
+            <div
+              style={{ left: `${currentTime * zoomLevel}px` }}
+              className="absolute top-0 bottom-0 w-px bg-sky-400 z-30 pointer-events-none shadow-[0_0_8px_rgba(56,189,248,0.8)]"
+            >
+              {/* Playhead needle cap */}
+              <div className="w-3 h-3 bg-sky-400 rounded-b-sm -ml-1.5 shadow-md flex items-center justify-center">
+                <div className="w-1 h-1 bg-black rounded-full" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Floating Drag Info Tooltip */}
-      {draggingClipId && currentDragStart !== null && (
-        <div className="fixed bottom-6 right-6 z-50 px-4 py-2 rounded-xl bg-black/90 backdrop-blur border border-sky-500/60 shadow-2xl text-sky-400 font-mono text-xs flex items-center gap-3">
-          <div className="font-bold">SÜRÜKLE / TRIM:</div>
-          <div>Başlangıç: {currentDragStart.toFixed(2)}s</div>
-          {currentDragDuration !== null && <div>Süre: {currentDragDuration.toFixed(2)}s</div>}
-        </div>
-      )}
     </div>
   );
+}
+
+// -------------------------------------------------------------
+// Ruler Helper
+// -------------------------------------------------------------
+function renderRulerTicks(totalSeconds: number, pxPerSec: number) {
+  const stepSec = pxPerSec > 50 ? 1 : pxPerSec > 25 ? 5 : 10;
+  const tickCount = Math.ceil(totalSeconds / stepSec);
+  const elements = [];
+
+  for (let i = 0; i <= tickCount; i++) {
+    const sec = i * stepSec;
+    const leftPx = sec * pxPerSec;
+    elements.push(
+      <div
+        key={sec}
+        style={{ left: `${leftPx}px` }}
+        className="absolute bottom-0 flex flex-col items-start pointer-events-none"
+      >
+        <span className="text-[9px] font-mono text-slate-400 pl-1 -translate-y-1">
+          {formatTimecode(sec, 50).slice(3, 8)}
+        </span>
+        <div className="w-px h-2 bg-[#2d3748]" />
+      </div>
+    );
+  }
+  return elements;
 }

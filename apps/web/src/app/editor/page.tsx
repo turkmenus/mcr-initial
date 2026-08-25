@@ -6,34 +6,16 @@ import {
   Play,
   Pause,
   Scissors,
-  Plus,
-  Trash2,
   Download,
-  Layers,
-  ZoomIn,
-  ZoomOut,
   ChevronRight,
   ChevronLeft,
-  FileVideo,
-  Settings2,
-  UploadCloud,
-  FolderOpen,
-  Music,
-  CheckCircle2,
-  RefreshCw,
   Undo2,
   Redo2,
   Keyboard,
   SkipBack,
   SkipForward,
-  Sparkles,
-  Tv,
 } from "lucide-react";
-import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   TimelineProject,
   TimelineClip,
@@ -73,8 +55,8 @@ import { SampleMediaItem } from "./data/sampleMedia";
 export default function EditorPage() {
   // 1. Initial Rich Timeline Project
   const [project, setProject] = useState<TimelineProject>(() => {
-    const p = createDefaultTimelineProject("Akşam Bülteni Master Kurgu");
-    p.duration = 60;
+    const p = createDefaultTimelineProject("Bülten Master Kurgusu");
+    p.duration = 45;
 
     // G1 Graphics Track
     p.tracks[0].clips = [
@@ -102,13 +84,13 @@ export default function EditorPage() {
     p.tracks[1].clips = [
       {
         id: "clip_t1",
-        name: "Manşet: Kritik Zirve",
+        name: "Manşet: Gündem",
         type: "text",
         text: "TÜRKİYE & BÖLGE GÜNDEMİ",
         start: 0,
-        duration: 4,
+        duration: 5,
         offset: 0,
-        fontSize: 48,
+        fontSize: 44,
         textColor: "#FFFFFF",
         backgroundColor: "rgba(10, 15, 29, 0.85)",
         textAlign: "center",
@@ -165,15 +147,15 @@ export default function EditorPage() {
       },
     ];
 
-    // A2 Music / Jingle Audio Track
+    // A2 Music Audio Track
     p.tracks[4].clips = [
       {
         id: "clip_a2",
-        name: "Ana Haber Açılış Jingle",
+        name: "Haber Açılış Jingle",
         type: "audio",
         src: "synthetic://audio_jingle",
         start: 0,
-        duration: 8,
+        duration: 6,
         offset: 0,
         volume: 0.7,
         fadeIn: 0.2,
@@ -185,7 +167,7 @@ export default function EditorPage() {
     return p;
   });
 
-  // 2. Undo / Redo History Stack
+  // 2. History Stack
   const [history, setHistory] = useState<TimelineProject[]>([]);
   const [redoStack, setRedoStack] = useState<TimelineProject[]>([]);
 
@@ -220,7 +202,6 @@ export default function EditorPage() {
   // Modals
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isShortcutsModalOpen, setIsShortcutsModalOpen] = useState(false);
-  const [rightTab, setRightTab] = useState<"mam" | "inspector">("mam");
 
   // MAM Media State
   const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>([]);
@@ -246,7 +227,7 @@ export default function EditorPage() {
     fetchMediaAssets();
   }, []);
 
-  // Handle Playback Loop
+  // Playback Loop
   useEffect(() => {
     const projDuration = project.duration ?? 60;
     if (isPlaying) {
@@ -277,16 +258,13 @@ export default function EditorPage() {
     };
   }, [isPlaying, project.duration]);
 
-  // Handle File Upload (Real Video/Audio/Image)
+  // Handle File Upload
   const handleFileUpload = async (file: File) => {
     setIsUploading(true);
     setUploadProgress(`Yükleniyor: ${file.name}...`);
 
     try {
       const blobUrl = URL.createObjectURL(file);
-      const isAudio = file.type.startsWith("audio");
-      const isImage = file.type.startsWith("image");
-
       const localAsset: MediaAsset = {
         id: `media_${Date.now()}`,
         filename: file.name,
@@ -302,7 +280,6 @@ export default function EditorPage() {
         createdAt: Date.now(),
       };
 
-      // Also try uploading to server MAM
       try {
         const reader = new FileReader();
         reader.onload = async () => {
@@ -322,8 +299,8 @@ export default function EditorPage() {
       } catch {}
 
       setMediaAssets((prev) => [localAsset, ...prev]);
-      setUploadProgress("Dosya hazır! Timeline'a eklenebilir.");
-      setTimeout(() => setUploadProgress(""), 3000);
+      setUploadProgress("Dosya hazır!");
+      setTimeout(() => setUploadProgress(""), 2000);
       setIsUploading(false);
     } catch {
       setIsUploading(false);
@@ -331,126 +308,107 @@ export default function EditorPage() {
     }
   };
 
-  // Add Asset directly to Timeline
+  // Add Asset to Timeline
   const handleAddAsset = (asset: MediaAsset) => {
     const isAudio = asset.mimeType.startsWith("audio");
-    const isImage = asset.mimeType.startsWith("image");
-
-    let targetTrack = project.tracks.find((t) => (isAudio ? t.type === "audio" : isImage ? t.type === "video" : t.type === "video"));
-    if (!targetTrack) targetTrack = project.tracks[0];
-
-    const newClip: TimelineClip = isAudio
-      ? {
-          id: `clip_a_${Date.now()}`,
-          name: asset.originalName,
-          type: "audio",
-          src: asset.filePath,
-          start: currentTime,
-          duration: asset.durationSeconds || 10,
-          offset: 0,
-          volume: 1,
-          fadeIn: 0,
-          fadeOut: 0,
-          color: "#10B981",
-        }
-      : isImage
-      ? {
-          id: `clip_img_${Date.now()}`,
-          name: asset.originalName,
-          type: "image",
-          src: asset.filePath,
-          start: currentTime,
-          duration: 6,
-          offset: 0,
-          scale: 1,
-          opacity: 1,
-          color: "#7C3AED",
-        }
-      : {
-          id: `clip_v_${Date.now()}`,
-          name: asset.originalName,
-          type: "video",
-          src: asset.filePath,
-          start: currentTime,
-          duration: asset.durationSeconds || 10,
-          offset: 0,
-          volume: 1,
-          speed: 1,
-          scale: 1,
-          opacity: 1,
-          color: "#0284C7",
-        };
-
-    pushStateToHistory(addClipToTrack(project, targetTrack.id, newClip));
-    setSelectedClipId(newClip.id);
-    setRightTab("inspector");
-  };
-
-  // Add Stock Media Item
-  const handleAddStockMedia = (item: SampleMediaItem) => {
-    const isAudio = item.type === "audio";
     let targetTrack = project.tracks.find((t) => (isAudio ? t.type === "audio" : t.type === "video"));
     if (!targetTrack) targetTrack = project.tracks[0];
 
     const newClip: TimelineClip = isAudio
       ? {
           id: `clip_a_${Date.now()}`,
-          name: item.name,
+          name: asset.originalName,
           type: "audio",
-          src: item.src || "synthetic://audio",
+          src: asset.filePath,
           start: currentTime,
-          duration: item.duration,
+          duration: asset.durationSeconds || 10,
           offset: 0,
           volume: 1,
-          fadeIn: 0.2,
-          fadeOut: 0.5,
-          color: item.color || "#10B981",
+          color: "#059669",
         }
       : {
           id: `clip_v_${Date.now()}`,
-          name: item.name,
+          name: asset.originalName,
           type: "video",
-          src: item.src || "synthetic://video",
+          src: asset.filePath,
           start: currentTime,
-          duration: item.duration,
+          duration: asset.durationSeconds || 10,
           offset: 0,
           volume: 1,
-          speed: 1,
           scale: 1,
           opacity: 1,
-          color: item.color || "#0284C7",
+          color: "#2563EB",
         };
 
-    pushStateToHistory(addClipToTrack(project, targetTrack.id, newClip));
+    const nextProject = addClipToTrack(project, targetTrack.id, newClip);
+    pushStateToHistory(nextProject);
     setSelectedClipId(newClip.id);
-    setRightTab("inspector");
   };
 
-  // Add OGraf Template Clip
-  const handleAddOGrafTemplate = (template: any) => {
+  const handleAddStockMedia = (item: SampleMediaItem) => {
+    let targetTrack = project.tracks.find((t) => t.type === item.type);
+    if (!targetTrack) targetTrack = project.tracks[0];
+
+    const newClip: TimelineClip =
+      item.type === "video"
+        ? {
+            id: `clip_v_${Date.now()}`,
+            name: item.name,
+            type: "video",
+            src: item.src,
+            start: currentTime,
+            duration: item.duration,
+            offset: 0,
+            volume: 1,
+            scale: 1,
+            opacity: 1,
+            color: "#2563EB",
+          }
+        : {
+            id: `clip_a_${Date.now()}`,
+            name: item.name,
+            type: "audio",
+            src: item.src,
+            start: currentTime,
+            duration: item.duration,
+            offset: 0,
+            volume: 0.8,
+            color: "#059669",
+          };
+
+    const nextProject = addClipToTrack(project, targetTrack.id, newClip);
+    pushStateToHistory(nextProject);
+    setSelectedClipId(newClip.id);
+  };
+
+  const handleAddOGrafTemplate = (tmpl: any) => {
     let targetTrack = project.tracks.find((t) => t.type === "graphics");
     if (!targetTrack) targetTrack = project.tracks[0];
 
     const newClip: GraphicsOverlayClip = {
       id: `clip_g_${Date.now()}`,
-      name: template.name,
+      name: tmpl.name,
       type: "graphics",
-      templateId: template.templateId,
+      templateId: tmpl.templateId,
       start: currentTime,
-      duration: template.duration || 6,
+      duration: tmpl.duration,
       offset: 0,
       inDuration: 0.5,
-      outDuration: 0.4,
-      data: template.defaultData || {},
-      color: template.color || "#DC2626",
+      outDuration: 0.5,
+      data: {
+        title: "Konuk İsim Soyisim",
+        subtitle: "Uzman Ünvan / Canlı Bağlantı",
+        category: "CANLI",
+        accent: "#C8102E",
+      },
+      color: "#DC2626",
     };
 
-    pushStateToHistory(addClipToTrack(project, targetTrack.id, newClip));
+    const nextProject = addClipToTrack(project, targetTrack.id, newClip);
+    pushStateToHistory(nextProject);
     setSelectedClipId(newClip.id);
-    setRightTab("inspector");
   };
 
-  // Add Text Preset Clip
   const handleAddTextPreset = (preset: any) => {
     let targetTrack = project.tracks.find((t) => t.type === "text");
     if (!targetTrack) targetTrack = project.tracks[0];
@@ -461,85 +419,96 @@ export default function EditorPage() {
       type: "text",
       text: preset.text,
       start: currentTime,
-      duration: preset.duration || 5,
+      duration: preset.duration,
       offset: 0,
-      fontSize: preset.fontSize || 48,
-      fontWeight: preset.fontWeight || "bold",
-      textColor: preset.textColor || "#FFFFFF",
-      backgroundColor: preset.backgroundColor || "rgba(10,15,29,0.9)",
-      textAlign: preset.textAlign || "center",
+      fontSize: preset.fontSize,
+      textColor: "#FFFFFF",
+      backgroundColor: "rgba(10, 15, 29, 0.85)",
+      textAlign: "center",
       color: "#D97706",
     };
 
-    pushStateToHistory(addClipToTrack(project, targetTrack.id, newClip));
+    const nextProject = addClipToTrack(project, targetTrack.id, newClip);
+    pushStateToHistory(nextProject);
     setSelectedClipId(newClip.id);
-    setRightTab("inspector");
   };
 
-  // Timeline Handlers
+  // Timeline Mutations
   const handleMoveClip = (clipId: string, newStart: number, targetTrackId?: string) => {
-    pushStateToHistory(moveClip(project, clipId, newStart, targetTrackId));
+    const nextProject = moveClip(project, clipId, newStart, targetTrackId);
+    pushStateToHistory(nextProject);
   };
 
   const handleTrimClip = (clipId: string, newStart: number, newDuration: number, newOffset?: number) => {
-    pushStateToHistory(trimClip(project, clipId, newStart, newDuration, newOffset));
+    const nextProject = trimClip(project, clipId, newStart, newDuration, newOffset);
+    pushStateToHistory(nextProject);
   };
 
   const handleSplitClip = (clipId: string, splitTime: number) => {
-    pushStateToHistory(splitClip(project, clipId, splitTime));
+    const nextProject = splitClip(project, clipId, splitTime);
+    pushStateToHistory(nextProject);
   };
 
   const handleDeleteClip = (clipId: string) => {
-    pushStateToHistory(removeClip(project, clipId));
+    const nextProject = removeClip(project, clipId);
+    pushStateToHistory(nextProject);
     if (selectedClipId === clipId) setSelectedClipId(null);
   };
 
   const handleDuplicateClip = (clipId: string) => {
-    pushStateToHistory(duplicateClip(project, clipId));
+    const nextProject = duplicateClip(project, clipId);
+    pushStateToHistory(nextProject);
   };
 
-  const handleUpdateClip = (clipId: string, partial: Partial<TimelineClip> | Record<string, any>) => {
-    pushStateToHistory(updateClipProperties(project, clipId, partial));
+  const handleUpdateClip = (clipId: string, partial: any) => {
+    const nextProject = updateClipProperties(project, clipId, partial);
+    pushStateToHistory(nextProject);
   };
 
   const handleAddTrack = (type: "video" | "audio" | "graphics" | "text") => {
-    pushStateToHistory(addTrack(project, type));
+    const nextProject = addTrack(project, type);
+    pushStateToHistory(nextProject);
   };
 
   const handleRemoveTrack = (trackId: string) => {
-    pushStateToHistory(removeTrack(project, trackId));
+    const nextProject = removeTrack(project, trackId);
+    pushStateToHistory(nextProject);
   };
 
   const handleToggleTrackMute = (trackId: string) => {
-    const track = project.tracks.find((t) => t.id === trackId);
-    if (!track) return;
-    pushStateToHistory(updateTrack(project, trackId, { muted: !track.muted }));
+    const tr = project.tracks.find((t) => t.id === trackId);
+    if (!tr) return;
+    const nextProject = updateTrack(project, trackId, { muted: !tr.muted });
+    pushStateToHistory(nextProject);
   };
 
   const handleToggleTrackVisible = (trackId: string) => {
-    const track = project.tracks.find((t) => t.id === trackId);
-    if (!track) return;
-    pushStateToHistory(updateTrack(project, trackId, { visible: track.visible === false ? true : false }));
+    const tr = project.tracks.find((t) => t.id === trackId);
+    if (!tr) return;
+    const nextProject = updateTrack(project, trackId, { visible: !tr.visible });
+    pushStateToHistory(nextProject);
   };
 
   const handleToggleTrackLock = (trackId: string) => {
-    const track = project.tracks.find((t) => t.id === trackId);
-    if (!track) return;
-    pushStateToHistory(updateTrack(project, trackId, { locked: !track.locked }));
+    const tr = project.tracks.find((t) => t.id === trackId);
+    if (!tr) return;
+    const nextProject = updateTrack(project, trackId, { locked: !tr.locked });
+    pushStateToHistory(nextProject);
   };
 
-  const handleAddMarker = (time: number, label = "İşaretçi") => {
-    pushStateToHistory(addMarker(project, time, label));
+  const handleAddMarker = (time: number, label?: string) => {
+    const nextProject = addMarker(project, time, label || "İşaret", "#F59E0B");
+    pushStateToHistory(nextProject);
   };
 
   const handleRemoveMarker = (markerId: string) => {
-    pushStateToHistory(removeMarker(project, markerId));
+    const nextProject = removeMarker(project, markerId);
+    pushStateToHistory(nextProject);
   };
 
-  // Keyboard Shortcuts Listener
+  // Keyboard Shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger if user is typing in an input / textarea
       if (
         document.activeElement?.tagName === "INPUT" ||
         document.activeElement?.tagName === "TEXTAREA"
@@ -550,190 +519,178 @@ export default function EditorPage() {
       if (e.code === "Space") {
         e.preventDefault();
         setIsPlaying((p) => !p);
-      } else if (e.code === "KeyC") {
-        e.preventDefault();
-        if (selectedClipId) handleSplitClip(selectedClipId, currentTime);
-      } else if (e.code === "Delete" || e.code === "Backspace") {
-        if (selectedClipId) {
-          e.preventDefault();
-          handleDeleteClip(selectedClipId);
-        }
-      } else if (e.ctrlKey && e.code === "KeyD") {
-        e.preventDefault();
-        if (selectedClipId) handleDuplicateClip(selectedClipId);
-      } else if (e.ctrlKey && e.code === "KeyZ") {
-        e.preventDefault();
-        if (e.shiftKey) handleRedo();
-        else handleUndo();
-      } else if (e.ctrlKey && e.code === "KeyY") {
-        e.preventDefault();
-        handleRedo();
       } else if (e.code === "ArrowLeft") {
         e.preventDefault();
-        const step = e.shiftKey ? 1.0 : 1 / 50;
-        setCurrentTime((t) => Math.max(0, t - step));
+        setCurrentTime((t) => Math.max(0, t - 1 / 50));
       } else if (e.code === "ArrowRight") {
         e.preventDefault();
-        const step = e.shiftKey ? 1.0 : 1 / 50;
-        const dur = project.duration ?? 60;
-        setCurrentTime((t) => Math.min(dur, t + step));
+        setCurrentTime((t) => Math.min(project.duration ?? 60, t + 1 / 50));
       } else if (e.code === "Home") {
         e.preventDefault();
         setCurrentTime(0);
       } else if (e.code === "End") {
         e.preventDefault();
         setCurrentTime(project.duration ?? 60);
-      } else if (e.code === "KeyM") {
+      } else if (e.key === "Delete" || e.key === "Backspace") {
+        if (selectedClipId) {
+          e.preventDefault();
+          handleDeleteClip(selectedClipId);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "z") {
         e.preventDefault();
-        handleAddMarker(currentTime);
+        if (e.shiftKey) {
+          handleRedo();
+        } else {
+          handleUndo();
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+        e.preventDefault();
+        handleRedo();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "k") {
+        if (selectedClipId) {
+          e.preventDefault();
+          handleSplitClip(selectedClipId, currentTime);
+        }
       }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedClipId, currentTime, project.duration, handleUndo, handleRedo]);
+  }, [isPlaying, project.duration, selectedClipId, currentTime, handleUndo, handleRedo]);
 
   const selectedClip = project.tracks.flatMap((t) => t.clips).find((c) => c.id === selectedClipId) || null;
 
   return (
-    <div className="flex-1 flex flex-col p-5 space-y-4 max-w-[1920px] mx-auto w-full select-none">
-      {/* Top Transport & Action Bar */}
-      <Card className="p-3.5 flex flex-wrap items-center justify-between gap-4 shadow-xl border-border bg-card/90 backdrop-blur">
-        {/* Left: Project Info & SMPTE Timecode */}
-        <div className="flex items-center gap-5">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 shadow-md">
-              <Film className="w-5 h-5" />
-            </div>
-            <div>
-              <h1 className="text-base font-bold text-white leading-tight">{project.name}</h1>
-              <p className="text-xs text-muted-foreground font-mono">1920x1080 @ 50fps EDL Master</p>
-            </div>
+    <div className="flex-1 flex flex-col h-[calc(100vh-3.5rem)] bg-[#07090e] overflow-hidden select-none">
+      {/* 1. Top Compact Header & Transport Bar */}
+      <div className="h-11 px-3 bg-[#0e1217] border-b border-[#1e2538] flex items-center justify-between flex-shrink-0 z-20">
+        {/* Left: Project Title & Timecode */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Film className="w-4 h-4 text-sky-400" />
+            <input
+              value={project.name}
+              onChange={(e) => setProject({ ...project, name: e.target.value })}
+              className="bg-transparent text-xs font-bold text-slate-200 border-b border-transparent hover:border-[#1e2538] focus:border-sky-500 focus:outline-none px-1 py-0.5"
+            />
           </div>
 
-          <div className="h-8 w-px bg-border" />
+          <div className="h-4 w-px bg-[#1e2538]" />
 
-          {/* Timecode SMPTE readout */}
-          <div className="bg-black/90 px-4 py-1.5 rounded-xl border border-border font-mono shadow-inner">
-            <div className="text-[9px] text-muted-foreground font-bold tracking-wider">
-              PLAYHEAD TIMECODE
-            </div>
-            <div className="text-2xl font-black text-sky-400 tracking-widest leading-none">
+          {/* Timecode SMPTE Display */}
+          <div className="px-2.5 py-0.5 rounded bg-black/60 border border-[#1e2538] font-mono flex items-center gap-2">
+            <span className="text-[10px] text-slate-500 font-bold">TC</span>
+            <span className="text-base font-bold text-sky-400 tracking-wider">
               {formatTimecode(currentTime, 50)}
-            </div>
+            </span>
           </div>
+
+          <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
+            / {formatTimecode(project.duration || 60, 50)}
+          </span>
         </div>
 
-        {/* Center: Playback Transport Buttons */}
-        <div className="flex items-center gap-1.5">
-          <Button
-            variant="outline"
-            size="icon"
+        {/* Center: Playback Controls */}
+        <div className="flex items-center gap-1">
+          <button
             onClick={() => setCurrentTime(0)}
-            className="h-9 w-9 text-muted-foreground hover:text-white"
-            title="En Başa Dön (Home)"
+            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            title="Başa Dön (Home)"
           >
-            <SkipBack className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="outline"
-            size="icon"
+            <SkipBack className="w-3.5 h-3.5" />
+          </button>
+          <button
             onClick={() => setCurrentTime((t) => Math.max(0, t - 1 / 50))}
-            className="h-9 w-9"
+            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
             title="1 Kare Geri (←)"
           >
-            <ChevronLeft className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="broadcastTake"
-            size="default"
+            <ChevronLeft className="w-3.5 h-3.5" />
+          </button>
+          <button
             onClick={() => setIsPlaying(!isPlaying)}
-            className="gap-2 px-6 h-9 font-bold shadow-lg"
+            className="px-4 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
           >
             {isPlaying ? (
-              <Pause className="w-4 h-4 fill-white" />
+              <Pause className="w-3.5 h-3.5 fill-white" />
             ) : (
-              <Play className="w-4 h-4 fill-white ml-0.5" />
+              <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
             )}
-            <span>{isPlaying ? "DURDUR" : "OYNAT"}</span>
-          </Button>
-
-          <Button
-            variant="outline"
-            size="icon"
+            <span>{isPlaying ? "DUR" : "OYNAT"}</span>
+          </button>
+          <button
             onClick={() => setCurrentTime((t) => Math.min(project.duration ?? 60, t + 1 / 50))}
-            className="h-9 w-9"
+            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
             title="1 Kare İleri (→)"
           >
-            <ChevronRight className="w-4 h-4" />
-          </Button>
-
-          <Button
-            variant="outline"
-            size="icon"
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+          <button
             onClick={() => setCurrentTime(project.duration ?? 60)}
-            className="h-9 w-9 text-muted-foreground hover:text-white"
-            title="En Sona Git (End)"
+            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            title="Sona Git (End)"
           >
-            <SkipForward className="w-4 h-4" />
-          </Button>
+            <SkipForward className="w-3.5 h-3.5" />
+          </button>
         </div>
 
         {/* Right: History, Shortcuts, Export */}
         <div className="flex items-center gap-2">
-          {/* Undo / Redo */}
-          <div className="flex items-center gap-1 bg-secondary/40 rounded-lg p-0.5 border border-border">
-            <Button
-              variant="ghost"
-              size="icon"
+          <div className="flex items-center bg-[#0b0e14] p-0.5 rounded border border-[#1e2538]">
+            <button
               onClick={handleUndo}
               disabled={history.length === 0}
-              className="h-8 w-8 text-muted-foreground hover:text-white"
+              className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition"
               title="Geri Al (Ctrl+Z)"
             >
-              <Undo2 className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
+              <Undo2 className="w-3.5 h-3.5" />
+            </button>
+            <button
               onClick={handleRedo}
               disabled={redoStack.length === 0}
-              className="h-8 w-8 text-muted-foreground hover:text-white"
+              className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition"
               title="İleri Al (Ctrl+Y)"
             >
-              <Redo2 className="w-4 h-4" />
-            </Button>
+              <Redo2 className="w-3.5 h-3.5" />
+            </button>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => setIsShortcutsModalOpen(true)}
-            className="h-9 gap-1.5 font-bold text-slate-300"
+            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
             title="Klavye Kısayolları"
           >
-            <Keyboard className="w-4 h-4 text-sky-400" />
-            <span>Kısayollar</span>
-          </Button>
+            <Keyboard className="w-3.5 h-3.5" />
+          </button>
 
           <Button
-            variant="broadcastSuccess"
             size="sm"
             onClick={() => setIsExportModalOpen(true)}
-            className="h-9 gap-2 font-bold px-4 shadow-lg"
+            className="h-7 text-xs font-semibold gap-1.5 bg-sky-600 hover:bg-sky-500 text-white shadow"
           >
-            <Download className="w-4 h-4" />
-            <span>EXPORT / RENDER</span>
+            <Download className="w-3 h-3" />
+            <span>EXPORT</span>
           </Button>
         </div>
-      </Card>
+      </div>
 
-      {/* Main Workspace (Top Grid: Monitor & Media Library / Inspector) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Left 7 Columns: Program Monitor */}
-        <div className="lg:col-span-7 flex flex-col">
+      {/* 2. Top Half: 3-Panel Studio Workspace (Media | Monitor | Inspector) */}
+      <div className="h-[52%] grid grid-cols-12 gap-1.5 p-1.5 overflow-hidden">
+        {/* Left 3 Cols: Media Library */}
+        <div className="col-span-3 h-full overflow-hidden">
+          <MediaLibraryPanel
+            mediaAssets={mediaAssets}
+            isUploading={isUploading}
+            uploadProgress={uploadProgress}
+            onUploadFile={handleFileUpload}
+            onAddStockMedia={handleAddStockMedia}
+            onAddOGrafTemplate={handleAddOGrafTemplate}
+            onAddTextPreset={handleAddTextPreset}
+            onAddAsset={handleAddAsset}
+          />
+        </div>
+
+        {/* Center 6 Cols: Program Monitor */}
+        <div className="col-span-6 h-full overflow-hidden flex flex-col">
           <ProgramMonitor
             project={project}
             currentTime={currentTime}
@@ -747,75 +704,34 @@ export default function EditorPage() {
           />
         </div>
 
-        {/* Right 5 Columns: MAM Media Library & Clip Inspector */}
-        <Card className="lg:col-span-5 p-4 shadow-2xl flex flex-col border-border bg-card/95">
-          <Tabs
-            value={rightTab}
-            onValueChange={(v) => setRightTab(v as "mam" | "inspector")}
-            className="flex-1 flex flex-col space-y-3"
-          >
-            <div className="flex items-center justify-between border-b border-border pb-2">
-              <TabsList className="grid grid-cols-2 w-72 h-8">
-                <TabsTrigger value="mam" className="text-xs font-bold gap-1.5">
-                  <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Medya & Şablonlar</span>
-                </TabsTrigger>
-                <TabsTrigger value="inspector" className="text-xs font-bold gap-1.5">
-                  <Settings2 className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Klip Özellikleri</span>
-                </TabsTrigger>
-              </TabsList>
-
-              {selectedClip && (
-                <Badge variant="outline" className="font-mono text-[10px] text-slate-300">
-                  {selectedClip.name}
-                </Badge>
-              )}
-            </div>
-
-            <TabsContent value="mam" className="flex-1 flex flex-col mt-0">
-              <MediaLibraryPanel
-                mediaAssets={mediaAssets}
-                isUploading={isUploading}
-                uploadProgress={uploadProgress}
-                onUploadFile={handleFileUpload}
-                onAddStockMedia={handleAddStockMedia}
-                onAddOGrafTemplate={handleAddOGrafTemplate}
-                onAddTextPreset={handleAddTextPreset}
-                onAddAsset={handleAddAsset}
-              />
-            </TabsContent>
-
-            <TabsContent value="inspector" className="flex-1 flex flex-col mt-0">
-              <ClipInspector clip={selectedClip} onUpdateClip={handleUpdateClip} />
-            </TabsContent>
-          </Tabs>
-        </Card>
+        {/* Right 3 Cols: Clip Inspector */}
+        <div className="col-span-3 h-full overflow-hidden">
+          <ClipInspector clip={selectedClip} onUpdateClip={handleUpdateClip} />
+        </div>
       </div>
 
-      {/* Bottom Section: Multi-Track Interactive Timeline */}
-      <InteractiveTimeline
-        project={project}
-        currentTime={currentTime}
-        selectedClipId={selectedClipId}
-        onSelectClip={(id) => {
-          setSelectedClipId(id);
-          if (id) setRightTab("inspector");
-        }}
-        onSeek={(t) => setCurrentTime(t)}
-        onMoveClip={handleMoveClip}
-        onTrimClip={handleTrimClip}
-        onSplitClip={handleSplitClip}
-        onDeleteClip={handleDeleteClip}
-        onDuplicateClip={handleDuplicateClip}
-        onAddTrack={handleAddTrack}
-        onRemoveTrack={handleRemoveTrack}
-        onToggleTrackMute={handleToggleTrackMute}
-        onToggleTrackVisible={handleToggleTrackVisible}
-        onToggleTrackLock={handleToggleTrackLock}
-        onAddMarker={handleAddMarker}
-        onRemoveMarker={handleRemoveMarker}
-      />
+      {/* 3. Bottom Half: Multi-Track Interactive Timeline */}
+      <div className="h-[48%] p-1.5 pt-0 overflow-hidden flex flex-col">
+        <InteractiveTimeline
+          project={project}
+          currentTime={currentTime}
+          selectedClipId={selectedClipId}
+          onSelectClip={setSelectedClipId}
+          onSeek={setCurrentTime}
+          onMoveClip={handleMoveClip}
+          onTrimClip={handleTrimClip}
+          onSplitClip={handleSplitClip}
+          onDeleteClip={handleDeleteClip}
+          onDuplicateClip={handleDuplicateClip}
+          onAddTrack={handleAddTrack}
+          onRemoveTrack={handleRemoveTrack}
+          onToggleTrackMute={handleToggleTrackMute}
+          onToggleTrackVisible={handleToggleTrackVisible}
+          onToggleTrackLock={handleToggleTrackLock}
+          onAddMarker={handleAddMarker}
+          onRemoveMarker={handleRemoveMarker}
+        />
+      </div>
 
       {/* Modals */}
       <ExportModal
@@ -823,8 +739,8 @@ export default function EditorPage() {
         onClose={() => setIsExportModalOpen(false)}
         project={project}
         canvas={canvasRefInstance.current}
-        onSeek={(t) => setCurrentTime(t)}
-        onSetIsPlaying={(p) => setIsPlaying(p)}
+        onSeek={setCurrentTime}
+        onSetIsPlaying={setIsPlaying}
       />
 
       <KeyboardShortcutsModal

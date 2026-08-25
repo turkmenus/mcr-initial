@@ -1,15 +1,13 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import {
   Download,
   Zap,
   Server,
-  Film,
-  CheckCircle2,
-  AlertCircle,
   RefreshCw,
-  Sparkles,
+  Film,
+  CheckCircle,
 } from "lucide-react";
 import {
   Dialog,
@@ -20,10 +18,8 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { TimelineProject } from "@mcr/schema";
-import { getPresetList, getPreset } from "@mcr/presets";
+import { getPresetList } from "@mcr/presets";
 import { audioEngine } from "./AudioEngine";
 
 interface ExportModalProps {
@@ -43,7 +39,7 @@ export function ExportModal({
   onSeek,
   onSetIsPlaying,
 }: ExportModalProps) {
-  const [exportMode, setExportMode] = useState<"client" | "server">("client");
+  const [exportMode, setExportMode] = useState<"client" | "server">("server");
   const [selectedPresetId, setSelectedPresetId] = useState("broadcast-16:9");
 
   // Client-Side Export State
@@ -93,7 +89,6 @@ export function ExportModal({
         onSetIsPlaying(false);
       };
 
-      // Play through timeline
       const totalDuration = project.duration || 15;
       const startTime = Date.now();
 
@@ -120,7 +115,7 @@ export function ExportModal({
   // Handle Server-Side Master Render (FFmpeg Worker)
   const handleServerExport = async () => {
     setIsServerExporting(true);
-    setServerStatus("FFmpeg render kuyruğuna gönderiliyor...");
+    setServerStatus("FFmpeg render sunucusuna gönderiliyor...");
     setServerDownloadUrl(null);
 
     try {
@@ -159,125 +154,81 @@ export function ExportModal({
       }
     } catch {
       setIsServerExporting(false);
-      setServerStatus("FFmpeg Worker çevrimdışı — Tarayıcı içi hızlı export önerilir.");
+      setServerStatus("Render sunucusuna ulaşılamadı. Lütfen renderer servisinin çalıştığından emin olun.");
     }
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl">
+      <DialogContent className="max-w-lg bg-[#0e1217] border-[#1e2538] text-slate-200">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <Download className="w-5 h-5 text-emerald-400" />
-            <span>Video Dışa Aktar (Export & Render)</span>
+          <DialogTitle className="flex items-center gap-2 text-sm font-bold text-white">
+            <Download className="w-4 h-4 text-sky-400" />
+            <span>Video Dışa Aktar (Export)</span>
           </DialogTitle>
-          <DialogDescription className="text-xs">
-            Kurgunuzu tarayıcı içinde hızlı taslak olarak veya sunucuda FFmpeg master kalitesinde render edin.
+          <DialogDescription className="text-[11px] text-slate-400">
+            Kurgunuzu FFmpeg master kalitesinde veya hızlı tarayıcı taslağı olarak dışa aktarın.
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs
-          value={exportMode}
-          onValueChange={(val) => setExportMode(val as "client" | "server")}
-          className="space-y-4 pt-2"
-        >
-          <TabsList className="grid grid-cols-2 w-full">
-            <TabsTrigger value="client" className="text-xs font-bold gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-amber-400" />
-              <span>Hızlı Tarayıcı Export</span>
-            </TabsTrigger>
-            <TabsTrigger value="server" className="text-xs font-bold gap-1.5">
-              <Server className="w-3.5 h-3.5 text-sky-400" />
-              <span>Sunucu FFmpeg Master Render</span>
-            </TabsTrigger>
-          </TabsList>
+        {/* Mode Switcher */}
+        <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-[#0b0e14] rounded border border-[#1e2538]">
+          <button
+            onClick={() => setExportMode("server")}
+            className={`py-1.5 text-xs font-semibold rounded flex items-center justify-center gap-1.5 transition ${
+              exportMode === "server"
+                ? "bg-[#1e2538] text-white"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Server className="w-3.5 h-3.5 text-sky-400" />
+            <span>FFmpeg Master (MP4)</span>
+          </button>
+          <button
+            onClick={() => setExportMode("client")}
+            className={`py-1.5 text-xs font-semibold rounded flex items-center justify-center gap-1.5 transition ${
+              exportMode === "client"
+                ? "bg-[#1e2538] text-white"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5 text-amber-400" />
+            <span>Hızlı Taslak (WebM)</span>
+          </button>
+        </div>
 
-          {/* Mode 1: Client-Side Fast Draft */}
-          <TabsContent value="client" className="space-y-4">
-            <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/30 text-xs space-y-1.5">
-              <div className="font-bold text-amber-300 flex items-center gap-1.5">
-                <Sparkles className="w-4 h-4" />
-                <span>Anında Tarayıcı Render (WebCodecs / Canvas Capture)</span>
-              </div>
-              <div className="text-muted-foreground text-[11px] leading-relaxed">
-                Sunucuya yükleme yapmadan kurguyu doğrudan tarayıcınızda WebM/MP4 olarak kaydeder. Hızlı taslak önizleme ve sosyal medya paylaşımları için idealdir.
-              </div>
-            </div>
-
-            {isClientExporting && (
-              <div className="space-y-2 p-3 bg-secondary/50 rounded-xl border border-border">
-                <div className="flex justify-between text-xs font-bold text-slate-300">
-                  <span className="flex items-center gap-1.5 text-sky-400">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    İşleniyor & Kaydediliyor...
-                  </span>
-                  <span className="font-mono text-sky-400">{clientProgress}%</span>
-                </div>
-                <div className="w-full h-2 bg-secondary rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-sky-500 to-emerald-400 transition-all duration-200"
-                    style={{ width: `${clientProgress}%` }}
-                  />
-                </div>
-              </div>
-            )}
-
-            {clientDownloadUrl && (
-              <a
-                href={clientDownloadUrl}
-                download={`${project.name.replace(/\s+/g, "_")}_draft.webm`}
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-xl transition"
-              >
-                <Download className="w-4 h-4" />
-                <span>Hazır Taslak Videoyu İndir (.webm)</span>
-              </a>
-            )}
-
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose} disabled={isClientExporting}>
-                İptal
-              </Button>
-              <Button
-                variant="broadcastTake"
-                onClick={handleClientSideExport}
-                disabled={isClientExporting}
-                className="gap-1.5 font-bold"
-              >
-                <Zap className="w-4 h-4" />
-                <span>{isClientExporting ? "Kayıt Yapılıyor..." : "Hemen Dışa Aktar"}</span>
-              </Button>
-            </DialogFooter>
-          </TabsContent>
-
-          {/* Mode 2: Server-Side FFmpeg Master Render */}
-          <TabsContent value="server" className="space-y-4">
-            <div className="space-y-2.5">
-              <label className="text-xs font-bold text-slate-300">Yayın / Export Profili</label>
-              <div className="space-y-2 max-h-44 overflow-y-auto pr-1">
+        {/* Mode 1: Server FFmpeg */}
+        {exportMode === "server" && (
+          <div className="space-y-3 pt-1">
+            <div className="space-y-1.5">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Export Profili
+              </span>
+              <div className="space-y-1 max-h-40 overflow-y-auto pr-1">
                 {getPresetList().map((preset) => (
                   <div
                     key={preset.id}
                     onClick={() => setSelectedPresetId(preset.id)}
-                    className={`p-3 rounded-xl border cursor-pointer transition flex items-center justify-between ${
+                    className={`p-2 rounded border cursor-pointer transition flex items-center justify-between ${
                       selectedPresetId === preset.id
-                        ? "bg-primary/20 border-primary text-white"
-                        : "bg-secondary/40 border-border text-muted-foreground hover:border-slate-500"
+                        ? "bg-sky-500/10 border-sky-500/50 text-white"
+                        : "bg-[#121722] border-[#1e2538] text-slate-400 hover:bg-[#161c2b]"
                     }`}
                   >
                     <div>
-                      <div className="text-xs font-bold text-slate-200">{preset.name}</div>
-                      <div className="text-[10px] text-muted-foreground">{preset.description}</div>
+                      <div className="text-[11px] font-semibold text-slate-200">{preset.name}</div>
+                      <div className="text-[9px] text-slate-500">{preset.description}</div>
                     </div>
-                    <Badge variant="info" className="font-mono text-[10px]">
+                    <span className="text-[10px] font-mono font-bold text-sky-400">
                       {preset.width}x{preset.height}
-                    </Badge>
+                    </span>
                   </div>
                 ))}
               </div>
             </div>
 
             {serverStatus && (
-              <div className="p-3 bg-secondary/80 rounded-xl border border-border text-xs font-mono text-sky-400">
+              <div className="p-2 bg-[#121722] rounded border border-[#1e2538] text-[11px] font-mono text-sky-400">
                 {serverStatus}
               </div>
             )}
@@ -288,29 +239,91 @@ export function ExportModal({
                 download
                 target="_blank"
                 rel="noreferrer"
-                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-xl transition"
+                className="w-full flex items-center justify-center gap-2 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition"
               >
-                <Download className="w-4 h-4" />
-                <span>Master Video Dosyasını İndir (.mp4)</span>
+                <Download className="w-3.5 h-3.5" />
+                <span>Master Dosyasını İndir (.mp4)</span>
               </a>
             )}
 
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose} disabled={isServerExporting}>
+            <DialogFooter className="pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+                disabled={isServerExporting}
+                className="h-8 text-xs bg-[#121722] border-[#1e2538]"
+              >
                 İptal
               </Button>
               <Button
-                variant="broadcastSuccess"
+                size="sm"
                 onClick={handleServerExport}
                 disabled={isServerExporting}
-                className="gap-1.5 font-bold"
+                className="h-8 text-xs font-semibold gap-1.5 bg-sky-600 hover:bg-sky-500 text-white"
               >
-                <Server className="w-4 h-4" />
+                <Server className="w-3.5 h-3.5" />
                 <span>{isServerExporting ? "Render Sürüyor..." : "Master Render Başlat"}</span>
               </Button>
             </DialogFooter>
-          </TabsContent>
-        </Tabs>
+          </div>
+        )}
+
+        {/* Mode 2: Client Draft */}
+        {exportMode === "client" && (
+          <div className="space-y-3 pt-1">
+            <div className="p-2.5 rounded bg-[#121722] border border-[#1e2538] text-[11px] text-slate-400">
+              Kurguyu sunucuya gitmeden doğrudan tarayıcı belleğinde WebM olarak kaydeder.
+            </div>
+
+            {isClientExporting && (
+              <div className="space-y-1.5 p-2 bg-[#121722] rounded border border-[#1e2538]">
+                <div className="flex justify-between text-[11px] font-mono text-slate-300">
+                  <span>Kaydediliyor...</span>
+                  <span className="text-sky-400">{clientProgress}%</span>
+                </div>
+                <div className="w-full h-1.5 bg-[#0b0e14] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-sky-500 transition-all duration-150"
+                    style={{ width: `${clientProgress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
+            {clientDownloadUrl && (
+              <a
+                href={clientDownloadUrl}
+                download={`${project.name.replace(/\s+/g, "_")}_draft.webm`}
+                className="w-full flex items-center justify-center gap-2 py-2 rounded bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs transition"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Taslak Videoyu İndir (.webm)</span>
+              </a>
+            )}
+
+            <DialogFooter className="pt-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+                disabled={isClientExporting}
+                className="h-8 text-xs bg-[#121722] border-[#1e2538]"
+              >
+                İptal
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleClientSideExport}
+                disabled={isClientExporting}
+                className="h-8 text-xs font-semibold gap-1.5 bg-sky-600 hover:bg-sky-500 text-white"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                <span>{isClientExporting ? "Kayıt Yapılıyor..." : "Hemen Dışa Aktar"}</span>
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

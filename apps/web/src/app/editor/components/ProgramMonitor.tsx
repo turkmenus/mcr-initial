@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Maximize2,
   Minimize2,
@@ -12,9 +12,9 @@ import {
   Tv,
   Film,
   Sparkles,
+  Monitor,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   TimelineProject,
   VideoClip,
@@ -48,7 +48,7 @@ export function ProgramMonitor({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [showSafeZones, setShowSafeZones] = useState(true);
+  const [showSafeZones, setShowSafeZones] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
   const videoElementsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
   const imagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
@@ -105,10 +105,26 @@ export function ProgramMonitor({
         }
       }
     });
-  }, [activeFrame.videoClips, isPlaying, currentTime]);
 
-  // Canvas Compositing Loop
-  const drawFrame = useCallback(() => {
+    if (!isPlaying) {
+      videoElementsRef.current.forEach((el) => {
+        if (!el.paused) el.pause();
+      });
+    }
+  }, [activeFrame, isPlaying]);
+
+  // Sync Audio Engine
+  useEffect(() => {
+    if (isMuted) {
+      audioEngine.setMasterVolume(0);
+    } else {
+      audioEngine.setMasterVolume(1);
+    }
+    audioEngine.syncTimelineAudio(project, currentTime, isPlaying);
+  }, [project, currentTime, isPlaying, isMuted]);
+
+  // Main Canvas Render Loop
+  useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
@@ -116,400 +132,194 @@ export function ProgramMonitor({
 
     const width = 1920;
     const height = 1080;
+    canvas.width = width;
+    canvas.height = height;
 
-    // 1. Clear & Background
-    ctx.clearRect(0, 0, width, height);
-    ctx.fillStyle = "#070B14";
+    // 1. Clear Frame
+    ctx.fillStyle = "#000000";
     ctx.fillRect(0, 0, width, height);
 
-    // 2. Draw Video Layers
-    if (activeFrame.videoClips.length > 0) {
-      activeFrame.videoClips.forEach(({ clip, localTime }) => {
-        ctx.save();
-
-        const scale = clip.scale ?? 1.0;
-        const posX = clip.x ?? 0;
-        const posY = clip.y ?? 0;
-        const rot = ((clip.rotation ?? 0) * Math.PI) / 180;
-        const opacity = clip.opacity ?? 1.0;
-
-        ctx.globalAlpha = opacity;
-        ctx.translate(width / 2 + posX, height / 2 + posY);
-        ctx.rotate(rot);
-        ctx.scale(scale, scale);
-
-        // Apply Color Grading Filters
-        const brightness = clip.brightness ?? 1.0;
-        const contrast = clip.contrast ?? 1.0;
-        const saturation = clip.saturation ?? 1.0;
-        const blur = clip.blur ?? 0;
-        ctx.filter = `brightness(${brightness}) contrast(${contrast}) saturate(${saturation}) blur(${blur}px)`;
-
-        const videoEl = videoElementsRef.current.get(clip.src);
-        if (videoEl && videoEl.readyState >= 2) {
-          // Draw real HTML5 video frame
-          ctx.drawImage(videoEl, -width / 2, -height / 2, width, height);
-        } else {
-          // Draw High Quality Synthetic Broadcast Footage
-          drawSyntheticVideoFrame(ctx, clip, localTime, width, height);
-        }
-
-        ctx.restore();
+    // 2. Render Video Tracks (Bottom to Top)
+    const sortedVideos = [...activeFrame.videoClips].reverse();
+    if (sortedVideos.length > 0) {
+      sortedVideos.forEach(({ clip, localTime }) => {
+        drawVideoClip(ctx, clip, localTime, width, height, videoElementsRef.current);
       });
     } else {
-      // Broadcast SMPTE Color Bars / No Signal Test Pattern
       drawTestPattern(ctx, width, height, currentTime);
     }
 
-    // 3. Draw Image Layers
-    activeFrame.imageClips.forEach(({ clip }) => {
-      ctx.save();
-      const scale = clip.scale ?? 1.0;
-      const posX = clip.x ?? 0;
-      const posY = clip.y ?? 0;
-      const rot = ((clip.rotation ?? 0) * Math.PI) / 180;
-      const opacity = clip.opacity ?? 1.0;
-
-      ctx.globalAlpha = opacity;
-      ctx.translate(width / 2 + posX, height / 2 + posY);
-      ctx.rotate(rot);
-      ctx.scale(scale, scale);
-
-      let img = imagesRef.current.get(clip.src);
-      if (!img) {
-        img = new Image();
-        img.src = clip.src;
-        imagesRef.current.set(clip.src, img);
-      }
-      if (img.complete && img.naturalWidth > 0) {
-        ctx.drawImage(img, -width / 2, -height / 2, width, height);
-      }
-      ctx.restore();
-    });
-
-    // 4. Draw Text / Title Layers
-    activeFrame.textClips.forEach(({ clip, status, inProgress, outProgress }) => {
-      ctx.save();
-      let alpha = 1.0;
-      let translateY = 0;
-
-      if (status === "IN") {
-        alpha = inProgress;
-        translateY = (1 - inProgress) * 30;
-      } else if (status === "OUT") {
-        alpha = 1 - outProgress;
-        translateY = outProgress * 30;
-      }
-
-      ctx.globalAlpha = alpha;
-      const fontSize = clip.fontSize ?? 48;
-      const fontFamily = clip.fontFamily ?? "sans-serif";
-      const fontWeight = clip.fontWeight ?? "bold";
-
-      ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
-      ctx.textAlign = clip.textAlign ?? "center";
-      ctx.textBaseline = "middle";
-
-      const textX = width / 2 + (clip.x ?? 0);
-      const textY = height / 2 + (clip.y ?? 0) + translateY;
-
-      // Background box
-      const metrics = ctx.measureText(clip.text || "Haber");
-      const paddingX = 24;
-      const paddingY = 16;
-      const boxW = metrics.width + paddingX * 2;
-      const boxH = fontSize + paddingY * 2;
-
-      ctx.fillStyle = clip.backgroundColor ?? "rgba(10, 15, 29, 0.85)";
-      let boxX = textX - boxW / 2;
-      if (clip.textAlign === "left") boxX = textX - paddingX;
-      if (clip.textAlign === "right") boxX = textX - boxW + paddingX;
-
-      ctx.beginPath();
-      ctx.roundRect(boxX, textY - boxH / 2, boxW, boxH, 8);
-      ctx.fill();
-
-      // Text Shadow
-      ctx.shadowColor = "rgba(0, 0, 0, 0.6)";
-      ctx.shadowBlur = 8;
-      ctx.shadowOffsetX = 0;
-      ctx.shadowOffsetY = 3;
-
-      // Text Content
-      ctx.fillStyle = clip.textColor ?? "#FFFFFF";
-      ctx.fillText(clip.text || "", textX, textY);
-
-      ctx.restore();
-    });
-
-    // 5. Draw OGraf Broadcast Graphics Overlays
+    // 3. Render Graphics Overlays (OGraf)
     activeFrame.graphicsClips.forEach(({ clip, status, inProgress, outProgress }) => {
       drawOGrafOverlay(ctx, clip, status, inProgress, outProgress, width, height);
     });
 
-    // 6. Draw Safe Zones & Crosshair
+    // 4. Render Text Clips
+    activeFrame.textClips.forEach(({ clip }) => {
+      drawTextClip(ctx, clip, width, height);
+    });
+
+    // 5. Draw Broadcast Safe Zones (if enabled)
     if (showSafeZones) {
       drawSafeZones(ctx, width, height);
     }
   }, [activeFrame, currentTime, showSafeZones]);
 
-  // Request Animation Frame Render
-  useEffect(() => {
-    drawFrame();
-  }, [drawFrame]);
+  // Aspect ratio styling
+  const aspectClass =
+    aspectRatio === "9:16"
+      ? "aspect-[9/16] max-h-[380px]"
+      : aspectRatio === "1:1"
+      ? "aspect-square max-h-[380px]"
+      : "aspect-video w-full";
 
   return (
     <div
       ref={containerRef}
-      className={`relative flex flex-col bg-card rounded-2xl border border-border overflow-hidden shadow-2xl ${
-        isFullscreen ? "p-0 rounded-none w-screen h-screen" : "p-4"
-      }`}
+      className="flex-1 flex flex-col bg-[#0b0e14] border border-[#1e2538] rounded-lg overflow-hidden select-none shadow-lg"
     >
       {/* Monitor Header Toolbar */}
-      <div className="flex items-center justify-between pb-3 border-b border-border/80 text-xs select-none">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 font-bold text-slate-200">
-            <Tv className="w-4 h-4 text-sky-400" />
-            <span>PROGRAM MONİTÖRÜ</span>
-          </div>
-          <Badge variant="info" className="font-mono text-[11px] px-2 py-0.5">
-            1920x1080 @ 50fps EDL
-          </Badge>
+      <div className="h-8 px-3 bg-[#121722] border-b border-[#1e2538] flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Monitor className="w-3.5 h-3.5 text-sky-400" />
+          <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
+            Program Monitor
+          </span>
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/50 text-slate-400 border border-[#1e2538]">
+            1080p50
+          </span>
         </div>
 
-        <div className="flex items-center gap-2">
-          {/* Safe Zones Toggle */}
-          <Button
-            variant={showSafeZones ? "secondary" : "ghost"}
-            size="sm"
+        {/* Aspect Ratio Switcher & Controls */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center bg-[#0b0e14] p-0.5 rounded border border-[#1e2538]">
+            {(["16:9", "9:16", "1:1"] as const).map((ratio) => (
+              <button
+                key={ratio}
+                onClick={() => onAspectRatioChange?.(ratio)}
+                className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${
+                  aspectRatio === ratio
+                    ? "bg-sky-600 text-white"
+                    : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {ratio}
+              </button>
+            ))}
+          </div>
+
+          <button
             onClick={() => setShowSafeZones(!showSafeZones)}
-            className="h-7 text-xs font-semibold gap-1"
-            title="Güvenli Alanlar (Safe Zones 80/90%)"
+            className={`p-1 rounded text-[10px] flex items-center gap-1 transition ${
+              showSafeZones
+                ? "bg-sky-500/20 text-sky-400 border border-sky-500/30"
+                : "text-slate-400 hover:text-slate-200"
+            }`}
+            title="Safe Title / Safe Action Kılavuzları"
           >
             <Grid className="w-3.5 h-3.5" />
-            <span>Kılavuzlar</span>
-          </Button>
+          </button>
 
-          {/* Aspect Ratio Switcher */}
-          {onAspectRatioChange && (
-            <div className="flex items-center rounded-lg bg-secondary/80 p-0.5 border border-border text-[11px] font-bold">
-              <button
-                onClick={() => onAspectRatioChange("16:9")}
-                className={`px-2 py-0.5 rounded ${
-                  aspectRatio === "16:9" ? "bg-primary text-white shadow" : "text-muted-foreground hover:text-white"
-                }`}
-              >
-                16:9
-              </button>
-              <button
-                onClick={() => onAspectRatioChange("9:16")}
-                className={`px-2 py-0.5 rounded ${
-                  aspectRatio === "9:16" ? "bg-primary text-white shadow" : "text-muted-foreground hover:text-white"
-                }`}
-              >
-                9:16
-              </button>
-              <button
-                onClick={() => onAspectRatioChange("1:1")}
-                className={`px-2 py-0.5 rounded ${
-                  aspectRatio === "1:1" ? "bg-primary text-white shadow" : "text-muted-foreground hover:text-white"
-                }`}
-              >
-                1:1
-              </button>
-            </div>
-          )}
+          <button
+            onClick={() => setIsMuted(!isMuted)}
+            className={`p-1 rounded transition ${
+              isMuted ? "text-rose-400" : "text-slate-400 hover:text-slate-200"
+            }`}
+            title={isMuted ? "Sesi Aç" : "Sesi Kapat"}
+          >
+            {isMuted ? <VolumeX className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
+          </button>
 
-          {/* Fullscreen Button */}
-          <Button
-            variant="ghost"
-            size="icon"
+          <button
             onClick={toggleFullscreen}
-            className="h-7 w-7 text-muted-foreground hover:text-white"
-            title={isFullscreen ? "Tam Ekrandan Çık" : "Tam Ekran Yap"}
+            className="p-1 rounded text-slate-400 hover:text-slate-200 transition"
+            title="Tam Ekran Monitör"
           >
             {isFullscreen ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-          </Button>
+          </button>
         </div>
       </div>
 
-      {/* Canvas Viewport */}
-      <div className="relative flex-1 flex items-center justify-center p-3 bg-black/90 min-h-[360px] max-h-[560px]">
+      {/* Monitor Display Surface */}
+      <div className="flex-1 bg-[#05070a] flex items-center justify-center p-2 relative overflow-hidden">
         <div
-          className={`relative max-w-full max-h-full rounded-xl overflow-hidden shadow-2xl border border-border/60 bg-black flex items-center justify-center ${
-            aspectRatio === "16:9" ? "aspect-video" : aspectRatio === "9:16" ? "aspect-[9/16]" : "aspect-square"
-          }`}
-          style={{ width: aspectRatio === "16:9" ? "100%" : aspectRatio === "9:16" ? "42%" : "65%" }}
-          onClick={onTogglePlay}
+          className={`relative max-w-full max-h-full flex items-center justify-center shadow-2xl bg-black rounded overflow-hidden ${aspectClass}`}
         >
           <canvas
             ref={canvasRef}
-            width={1920}
-            height={1080}
             className="w-full h-full object-contain cursor-pointer"
+            onClick={onTogglePlay}
           />
-
-          {/* Play/Pause Center Indicator Overlay on Hover */}
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20 opacity-0 hover:opacity-100 transition-opacity cursor-pointer">
-            <div className="w-14 h-14 rounded-2xl bg-black/80 backdrop-blur border border-white/20 flex items-center justify-center text-white shadow-2xl">
-              {isPlaying ? <Pause className="w-6 h-6 fill-white" /> : <Play className="w-6 h-6 fill-white ml-0.5" />}
-            </div>
-          </div>
-
-          {/* Live On-Screen Timecode Corner Watermark */}
-          <div className="absolute top-3 right-3 px-2.5 py-1 rounded-md bg-black/80 backdrop-blur border border-white/10 font-mono text-xs font-bold text-sky-400 shadow pointer-events-none">
-            {formatTimecode(currentTime, 50)}
-          </div>
         </div>
       </div>
     </div>
   );
 }
 
-// --- SYNTHETIC VIDEO & GRAPHICS RENDERERS ---
+// -------------------------------------------------------------
+// Canvas Drawing Helper Functions
+// -------------------------------------------------------------
 
-function drawSyntheticVideoFrame(
+function drawVideoClip(
   ctx: CanvasRenderingContext2D,
   clip: VideoClip,
   localTime: number,
   width: number,
-  height: number
+  height: number,
+  videoCache: Map<string, HTMLVideoElement>
 ) {
-  const t = localTime;
+  ctx.save();
 
-  if (clip.src.includes("studio") || clip.name.toLowerCase().includes("studio") || clip.name.toLowerCase().includes("haber")) {
-    // 1. Studio News Anchor Background Simulation
-    const grad = ctx.createRadialGradient(
-      width * 0.5 + Math.sin(t * 0.4) * 100,
-      height * 0.4,
-      50,
-      width * 0.5,
-      height * 0.5,
-      width * 0.7
-    );
-    grad.addColorStop(0, "#1E3A8A");
-    grad.addColorStop(0.5, "#0F172A");
-    grad.addColorStop(1, "#020617");
-    ctx.fillStyle = grad;
-    ctx.fillRect(-width / 2, -height / 2, width, height);
+  const scale = clip.scale ?? 1;
+  const x = clip.x ?? 0;
+  const y = clip.y ?? 0;
+  const rotation = (clip.rotation ?? 0) * (Math.PI / 180);
+  const opacity = clip.opacity ?? 1;
 
-    // Studio Grid floor
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.15)";
-    ctx.lineWidth = 2;
-    for (let x = -width / 2; x <= width / 2; x += 120) {
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x * 2.2, height / 2);
-      ctx.stroke();
-    }
+  ctx.globalAlpha = opacity;
+  ctx.translate(width / 2 + x, height / 2 + y);
+  ctx.rotate(rotation);
+  ctx.scale(scale, scale);
 
-    // Anchor Silhouette & Desk
-    ctx.fillStyle = "rgba(15, 23, 42, 0.95)";
-    ctx.beginPath();
-    ctx.ellipse(0, height / 2 - 40, width * 0.45, 120, 0, 0, Math.PI * 2);
-    ctx.fill();
+  const filters: string[] = [];
+  if (clip.brightness && clip.brightness !== 100) filters.push(`brightness(${clip.brightness}%)`);
+  if (clip.contrast && clip.contrast !== 100) filters.push(`contrast(${clip.contrast}%)`);
+  if (clip.saturation && clip.saturation !== 100) filters.push(`saturate(${clip.saturation}%)`);
+  if (clip.blur && clip.blur > 0) filters.push(`blur(${clip.blur}px)`);
 
-    // Studio Video Wall Animation
-    const wallX = -width * 0.35;
-    const wallY = -height * 0.32;
-    const wallW = width * 0.7;
-    const wallH = height * 0.45;
-    ctx.fillStyle = "rgba(2, 6, 23, 0.9)";
-    ctx.fillRect(wallX, wallY, wallW, wallH);
-    ctx.strokeStyle = "#0284C7";
-    ctx.lineWidth = 3;
-    ctx.strokeRect(wallX, wallY, wallW, wallH);
+  if (filters.length > 0) ctx.filter = filters.join(" ");
 
-    // World Map Dots on Video Wall
-    ctx.fillStyle = "#38BDF8";
-    for (let i = 0; i < 30; i++) {
-      const dotX = wallX + 40 + ((i * 37 + t * 40) % (wallW - 80));
-      const dotY = wallY + 40 + ((i * 23) % (wallH - 80));
-      ctx.beginPath();
-      ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    // Anchor Header
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "800 36px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("MCR HABER MERKEZİ • CANLI YAYIN", 0, -height * 0.18);
-  } else if (clip.src.includes("city") || clip.name.toLowerCase().includes("broll")) {
-    // 2. Cityscape / B-Roll Simulation
-    const grad = ctx.createLinearGradient(0, -height / 2, 0, height / 2);
-    grad.addColorStop(0, "#0F172A");
-    grad.addColorStop(0.6, "#1E293B");
-    grad.addColorStop(1, "#090D16");
-    ctx.fillStyle = grad;
-    ctx.fillRect(-width / 2, -height / 2, width, height);
-
-    // City Skyline Buildings
-    ctx.fillStyle = "#020617";
-    const bCount = 14;
-    for (let i = 0; i < bCount; i++) {
-      const bW = width / bCount;
-      const bH = 200 + ((i * 83) % 320);
-      const bX = -width / 2 + i * bW;
-      const bY = height / 2 - bH;
-      ctx.fillRect(bX, bY, bW - 4, bH);
-
-      // Windows with light flicker
-      ctx.fillStyle = ((i + Math.floor(t * 2)) % 3 === 0) ? "#FDE047" : "rgba(255,255,255,0.2)";
-      for (let wy = bY + 20; wy < height / 2 - 20; wy += 25) {
-        ctx.fillRect(bX + 15, wy, 8, 12);
-        ctx.fillRect(bX + 35, wy, 8, 12);
-      }
-      ctx.fillStyle = "#020617";
-    }
-
-    // Traffic light streaks (Long exposure effect)
-    ctx.fillStyle = "rgba(239, 68, 68, 0.8)";
-    ctx.fillRect(-width / 2, height / 2 - 30, width, 4);
-    ctx.fillStyle = "rgba(254, 240, 138, 0.9)";
-    ctx.fillRect(-width / 2, height / 2 - 18, width, 4);
-  } else if (clip.src.includes("breaking") || clip.name.toLowerCase().includes("stinger")) {
-    // 3. High Energy Breaking News Background
-    const grad = ctx.createRadialGradient(0, 0, 100, 0, 0, width * 0.7);
-    grad.addColorStop(0, "#DC2626");
-    grad.addColorStop(0.5, "#991B1B");
-    grad.addColorStop(1, "#450A0A");
-    ctx.fillStyle = grad;
-    ctx.fillRect(-width / 2, -height / 2, width, height);
-
-    // Dynamic rotating rays
-    ctx.save();
-    ctx.rotate(t * 0.5);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
-    ctx.lineWidth = 8;
-    for (let a = 0; a < Math.PI * 2; a += Math.PI / 8) {
-      ctx.beginPath();
-      ctx.moveTo(0, 0);
-      ctx.lineTo(Math.cos(a) * width, Math.sin(a) * width);
-      ctx.stroke();
-    }
-    ctx.restore();
-
-    ctx.fillStyle = "#FFFFFF";
-    ctx.font = "900 64px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("SON DAKİKA", 0, 10);
+  const videoEl = videoCache.get(clip.src);
+  if (videoEl && videoEl.readyState >= 2) {
+    ctx.drawImage(videoEl, -width / 2, -height / 2, width, height);
   } else {
-    // Default Clean Broadcast Gradient with Media Name
+    // Synthetic Clean Broadcast Studio Backdrop
     const grad = ctx.createLinearGradient(-width / 2, -height / 2, width / 2, height / 2);
-    grad.addColorStop(0, "#0F172A");
-    grad.addColorStop(1, "#1E293B");
+    if (clip.src.includes("studio")) {
+      grad.addColorStop(0, "#090d16");
+      grad.addColorStop(0.5, "#0f172a");
+      grad.addColorStop(1, "#0284c7");
+    } else if (clip.src.includes("city")) {
+      grad.addColorStop(0, "#0b132b");
+      grad.addColorStop(0.5, "#1c2541");
+      grad.addColorStop(1, "#3a506b");
+    } else {
+      grad.addColorStop(0, "#0f172a");
+      grad.addColorStop(1, "#1e293b");
+    }
     ctx.fillStyle = grad;
     ctx.fillRect(-width / 2, -height / 2, width, height);
 
-    ctx.fillStyle = "#38BDF8";
-    ctx.font = "bold 32px sans-serif";
+    ctx.fillStyle = "#38bdf8";
+    ctx.font = "bold 28px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(clip.name || "Video Klip", 0, -20);
-    ctx.font = "mono 20px sans-serif";
-    ctx.fillStyle = "#94A3B8";
+    ctx.fillText(clip.name || "Video Klip", 0, -10);
+    ctx.font = "16px monospace";
+    ctx.fillStyle = "#94a3b8";
     ctx.fillText(`Kare Süresi: ${localTime.toFixed(2)}s`, 0, 25);
   }
+
+  ctx.restore();
 }
 
 function drawTestPattern(
@@ -527,21 +337,21 @@ function drawTestPattern(
   });
 
   // Lower Section
-  ctx.fillStyle = "#0F172A";
+  ctx.fillStyle = "#0B0E14";
   ctx.fillRect(0, height * 0.7, width, height * 0.3);
 
   // Timecode Box
   ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
-  ctx.fillRect(width * 0.35, height * 0.75, width * 0.3, 70);
+  ctx.fillRect(width * 0.35, height * 0.76, width * 0.3, 60);
   ctx.strokeStyle = "#38BDF8";
-  ctx.lineWidth = 2;
-  ctx.strokeRect(width * 0.35, height * 0.75, width * 0.3, 70);
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(width * 0.35, height * 0.76, width * 0.3, 60);
 
   ctx.fillStyle = "#38BDF8";
-  ctx.font = "bold 36px monospace";
+  ctx.font = "bold 32px monospace";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(formatTimecode(time, 50), width * 0.5, height * 0.75 + 35);
+  ctx.fillText(formatTimecode(time, 50), width * 0.5, height * 0.76 + 30);
 }
 
 function drawOGrafOverlay(
@@ -576,64 +386,100 @@ function drawOGrafOverlay(
   const accent = clip.data?.accent || "#C8102E";
 
   const posX = width * 0.08;
-  const posY = height * 0.78;
+  const posY = height * 0.8;
 
-  // Badge
+  // Category Tag
   ctx.fillStyle = accent;
   ctx.beginPath();
-  ctx.roundRect(posX, posY - 36, 140, 36, [6, 6, 0, 0]);
+  ctx.roundRect(posX, posY - 32, 120, 32, [4, 4, 0, 0]);
   ctx.fill();
 
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "800 16px sans-serif";
+  ctx.font = "bold 14px -apple-system, BlinkMacSystemFont, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(category.toUpperCase(), posX + 16, posY - 18);
+  ctx.fillText(category.toUpperCase(), posX + 12, posY - 16);
 
-  // Main Box
-  ctx.fillStyle = "rgba(10, 15, 29, 0.95)";
+  // Main Banner
+  ctx.fillStyle = "rgba(11, 14, 20, 0.95)";
   ctx.beginPath();
-  ctx.roundRect(posX, posY, 640, 96, [0, 8, 8, 8]);
+  ctx.roundRect(posX, posY, 580, 84, [0, 6, 6, 6]);
   ctx.fill();
 
   // Accent Left Stripe
   ctx.fillStyle = accent;
-  ctx.fillRect(posX, posY, 8, 96);
+  ctx.fillRect(posX, posY, 6, 84);
 
   // Title Text
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "800 32px sans-serif";
-  ctx.fillText(title, posX + 28, posY + 36);
+  ctx.font = "bold 26px -apple-system, BlinkMacSystemFont, sans-serif";
+  ctx.fillText(title, posX + 22, posY + 32);
 
   // Subtitle Text
   ctx.fillStyle = "#94A3B8";
-  ctx.font = "500 20px sans-serif";
-  ctx.fillText(subtitle, posX + 28, posY + 70);
+  ctx.font = "18px -apple-system, BlinkMacSystemFont, sans-serif";
+  ctx.fillText(subtitle, posX + 22, posY + 62);
+
+  ctx.restore();
+}
+
+function drawTextClip(
+  ctx: CanvasRenderingContext2D,
+  clip: TextClip,
+  width: number,
+  height: number
+) {
+  ctx.save();
+
+  const fontSize = clip.fontSize ?? 48;
+  const textColor = clip.textColor ?? "#FFFFFF";
+  const bgColor = clip.backgroundColor;
+  const textAlign = clip.textAlign ?? "center";
+
+  ctx.font = `bold ${fontSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  ctx.textAlign = textAlign;
+  ctx.textBaseline = "middle";
+
+  const posX = textAlign === "left" ? width * 0.1 : textAlign === "right" ? width * 0.9 : width / 2;
+  const posY = height / 2;
+
+  const textMetrics = ctx.measureText(clip.text);
+  const textWidth = textMetrics.width;
+
+  if (bgColor && bgColor !== "transparent") {
+    ctx.fillStyle = bgColor;
+    const padding = 16;
+    const rectX = textAlign === "left" ? posX - padding : textAlign === "right" ? posX - textWidth - padding : posX - textWidth / 2 - padding;
+    ctx.fillRect(rectX, posY - fontSize / 2 - padding, textWidth + padding * 2, fontSize + padding * 2);
+  }
+
+  ctx.fillStyle = textColor;
+  ctx.fillText(clip.text, posX, posY);
 
   ctx.restore();
 }
 
 function drawSafeZones(ctx: CanvasRenderingContext2D, width: number, height: number) {
   ctx.save();
-  ctx.lineWidth = 1.5;
+  ctx.lineWidth = 1;
 
   // 1. Action Safe (90%)
-  ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+  ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
   ctx.strokeRect(width * 0.05, height * 0.05, width * 0.9, height * 0.9);
 
   // 2. Title Safe (80%)
-  ctx.strokeStyle = "rgba(245, 158, 11, 0.45)";
+  ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
   ctx.strokeRect(width * 0.1, height * 0.1, width * 0.8, height * 0.8);
 
   // 3. Center Crosshair
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.35)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.25)";
   const cx = width / 2;
   const cy = height / 2;
   ctx.beginPath();
-  ctx.moveTo(cx - 20, cy);
-  ctx.lineTo(cx + 20, cy);
-  ctx.moveTo(cx, cy - 20);
-  ctx.lineTo(cx, cy + 20);
+  ctx.moveTo(cx - 15, cy);
+  ctx.lineTo(cx + 15, cy);
+  ctx.moveTo(cx, cy - 15);
+  ctx.lineTo(cx, cy + 15);
   ctx.stroke();
 
   ctx.restore();
