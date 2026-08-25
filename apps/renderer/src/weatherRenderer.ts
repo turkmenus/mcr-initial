@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { WeatherSegmentRequest, CityWeather } from "@mcr/schema";
 import { BROADCAST_CITIES } from "@mcr/maps";
+import { isNvencAvailable } from "./ffmpegPipeline.js";
 
 export async function renderWeatherSegment(
   request: WeatherSegmentRequest,
@@ -19,6 +20,21 @@ export async function renderWeatherSegment(
   const width = request.resolution.width || 1920;
   const height = request.resolution.height || 1080;
 
+  const useGpu = await isNvencAvailable();
+  const videoEncoderArgs = useGpu
+    ? [
+        "-c:v", "h264_nvenc",
+        "-preset", "p4",
+        "-cq", "18",
+        "-pix_fmt", "yuv420p",
+      ]
+    : [
+        "-c:v", "libx264",
+        "-preset", "fast",
+        "-crf", "18",
+        "-pix_fmt", "yuv420p",
+      ];
+
   // Build FFmpeg command generating dark broadcast map background + animated city cards
   const ffmpegArgs = [
     "-y",
@@ -32,10 +48,7 @@ export async function renderWeatherSegment(
     `drawtext=text='MCR Broadcast Pre-rendered Weather Segment (1080p50)':fontcolor=#94a3b8:fontsize=24:x=(w-text_w)/2:y=h-120[outv]`,
     "-map", "[outv]",
     "-map", "1:a",
-    "-c:v", "libx264",
-    "-preset", "fast",
-    "-crf", "18",
-    "-pix_fmt", "yuv420p",
+    ...videoEncoderArgs,
     "-r", `${fps}`,
     "-c:a", "aac",
     "-b:a", "192k",

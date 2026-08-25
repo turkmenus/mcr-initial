@@ -2,7 +2,7 @@ import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
 import { TimelineProject } from "@mcr/schema";
-import { getPreset } from "@mcr/presets";
+import { getPreset, getPresetFfmpegArgs } from "@mcr/presets";
 
 export interface RenderJobProgress {
   jobId: string;
@@ -10,6 +10,39 @@ export interface RenderJobProgress {
   progress: number; // 0..100
   outputPath?: string;
   error?: string;
+}
+
+let hasNvencCache: boolean | null = null;
+
+/**
+ * Checks if NVIDIA NVENC hardware acceleration is available.
+ */
+export async function isNvencAvailable(): Promise<boolean> {
+  if (hasNvencCache !== null) return hasNvencCache;
+  if (process.env.USE_GPU_ACCEL === "false") {
+    hasNvencCache = false;
+    return false;
+  }
+  return new Promise((resolve) => {
+    const checkProc = spawn("ffmpeg", ["-encoders"]);
+    let output = "";
+    checkProc.stdout.on("data", (data) => {
+      output += data.toString();
+    });
+    checkProc.on("close", (code) => {
+      hasNvencCache = code === 0 && output.includes("h264_nvenc");
+      if (hasNvencCache) {
+        console.log("⚡ [MCR Renderer] NVIDIA NVENC hardware acceleration is ENABLED.");
+      } else {
+        console.log("ℹ️ [MCR Renderer] NVIDIA NVENC not detected. Using CPU encoding.");
+      }
+      resolve(hasNvencCache);
+    });
+    checkProc.on("error", () => {
+      hasNvencCache = false;
+      resolve(false);
+    });
+  });
 }
 
 export async function renderTimelineToVideo(
@@ -24,6 +57,9 @@ export async function renderTimelineToVideo(
   const preset = getPreset(presetId) || getPreset("broadcast-16:9")!;
   const outputFileName = `render_${project.id}_${Date.now()}.${preset.container}`;
   const outputPath = path.resolve(outputDir, outputFileName);
+
+  const useGpu = await isNvencAvailable();
+  const targetEncoderArgs = getPresetFfmpegArgs(preset, useGpu);
 
   // Find video clips
   const videoClips = project.tracks
@@ -41,7 +77,7 @@ export async function renderTimelineToVideo(
         "-f", "lavfi",
         "-i", "sine=frequency=1000:sample_rate=48000",
         "-t", `${duration}`,
-        ...preset.ffmpegArgs,
+        ...targetEncoderArgs,
         outputPath,
       ];
 
@@ -67,7 +103,7 @@ export async function renderTimelineToVideo(
       "-i", `sine=frequency=440:sample_rate=48000:d=${duration}`,
       "-vf", `drawtext=text='MCR EDL MASTER RENDER\\: ${project.name}':fontcolor=white:fontsize=48:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.6:boxborderw=10`,
       "-t", `${duration}`,
-      ...preset.ffmpegArgs,
+      ...targetEncoderArgs,
       outputPath,
     ];
 

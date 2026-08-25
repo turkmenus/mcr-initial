@@ -58,7 +58,7 @@ EXPOSE 5250
 CMD ["node", "apps/realtime/dist/server.js"]
 
 # ==========================================
-# Target 2: MCR Renderer & MAM (FFmpeg Worker)
+# Target 2: MCR Renderer & MAM (FFmpeg Worker + NVENC GPU Support)
 # ==========================================
 FROM packages-builder AS builder-renderer
 WORKDIR /app
@@ -70,6 +70,9 @@ RUN apk add --no-cache ffmpeg
 
 ENV NODE_ENV=production
 ENV PORT=4002
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=all,video,compute,utility
+ENV USE_GPU_ACCEL=auto
 
 COPY --from=builder-renderer /app ./
 
@@ -84,7 +87,6 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV CI=true
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NODE_OPTIONS="--max-old-space-size=4096"
 ARG NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
 

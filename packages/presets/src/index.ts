@@ -132,3 +132,34 @@ export const EXPORT_PRESETS: Record<string, ExportPreset> = {
 
 export const getPresetList = (): ExportPreset[] => Object.values(EXPORT_PRESETS);
 export const getPreset = (id: string): ExportPreset | undefined => EXPORT_PRESETS[id];
+
+/**
+ * Returns FFmpeg arguments tailored for NVIDIA NVENC GPU hardware acceleration or CPU fallback.
+ */
+export function getPresetFfmpegArgs(preset: ExportPreset, useGpu: boolean = false): string[] {
+  if (useGpu) {
+    if (preset.codec === "hevc") {
+      return [
+        "-c:v", "hevc_nvenc",
+        "-preset", "p4",
+        "-cq", "20",
+        "-pix_fmt", "yuv420p",
+        "-r", `${preset.fps}`,
+        "-c:a", "aac",
+        "-b:a", "320k",
+        "-movflags", "+faststart"
+      ];
+    }
+    return [
+      "-c:v", "h264_nvenc",
+      "-preset", "p4",
+      "-cq", "18",
+      "-pix_fmt", "yuv420p",
+      "-r", `${preset.fps}`,
+      "-c:a", "aac",
+      "-b:a", "320k",
+      "-movflags", "+faststart"
+    ];
+  }
+  return preset.ffmpegArgs;
+}
