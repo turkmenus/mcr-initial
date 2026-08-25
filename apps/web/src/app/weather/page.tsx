@@ -123,7 +123,7 @@ export default function WeatherStudioPage() {
         }, 1500);
       }
     } catch {
-      setRenderStatus("FFmpeg Worker çevrimdışı — Segment simüle edildi.");
+      setRenderStatus("Render sunucusuna bağlanılamadı. Lütfen renderer servisinin çalıştığından emin olun.");
     }
   };
 
