@@ -1,6 +1,9 @@
-/** @type {import('next').NextConfig} */
-const RENDERER_URL = process.env.INTERNAL_RENDERER_URL || "http://127.0.0.1:4002";
-const REALTIME_URL = process.env.INTERNAL_REALTIME_URL || "http://127.0.0.1:4001";
+const RENDERER_URL =
+  process.env.INTERNAL_RENDERER_URL ||
+  (process.env.NODE_ENV === "production" ? "http://renderer:4002" : "http://127.0.0.1:4002");
+const REALTIME_URL =
+  process.env.INTERNAL_REALTIME_URL ||
+  (process.env.NODE_ENV === "production" ? "http://realtime:4001" : "http://127.0.0.1:4001");
 
 const nextConfig = {
   eslint: {

@@ -96,6 +96,8 @@ FROM base AS web
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
+ENV INTERNAL_RENDERER_URL=http://renderer:4002
+ENV INTERNAL_REALTIME_URL=http://realtime:4001
 
 COPY --from=builder-web /app ./
 
