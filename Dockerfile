@@ -1,9 +1,10 @@
 # ==========================================
-# Base Stage: Node.js 22 + pnpm + build tools
+# Base Stage: Node.js 22 + pnpm
 # ==========================================
 FROM node:22-alpine AS base
 WORKDIR /app
 RUN npm install -g pnpm@11.23.0
+ENV NEXT_TELEMETRY_DISABLED=1
 
 # ==========================================
 # Dependencies Stage
@@ -27,30 +28,21 @@ COPY apps/renderer/package.json ./apps/renderer/
 RUN pnpm install --frozen-lockfile
 
 # ==========================================
-# Builder Stage: Build shared packages & apps
+# Packages Builder Stage: Build shared packages only
 # ==========================================
-FROM dependencies AS builder
+FROM dependencies AS packages-builder
 WORKDIR /app
 
 COPY . .
-RUN pnpm build
+RUN pnpm build:packages
 
 # ==========================================
-# Target 1: MCR Web Studio (Next.js 15)
+# Target 1: MCR Realtime Hub & Switcher (Node/WS)
 # ==========================================
-FROM base AS web
+FROM packages-builder AS builder-realtime
 WORKDIR /app
-ENV NODE_ENV=production
-ENV PORT=3000
+RUN pnpm build:realtime
 
-COPY --from=builder /app ./
-
-EXPOSE 3000
-CMD ["pnpm", "--filter", "@mcr/web", "start"]
-
-# ==========================================
-# Target 2: MCR Realtime Hub & Switcher (Node/WS)
-# ==========================================
 FROM base AS realtime
 WORKDIR /app
 ENV NODE_ENV=production
@@ -58,15 +50,19 @@ ENV PORT=4001
 ENV CASPAR_HOST=casparcg
 ENV CASPAR_PORT=5250
 
-COPY --from=builder /app ./
+COPY --from=builder-realtime /app ./
 
 EXPOSE 4001
 EXPOSE 5250
 CMD ["node", "apps/realtime/dist/server.js"]
 
 # ==========================================
-# Target 3: MCR Renderer & MAM (FFmpeg Worker)
+# Target 2: MCR Renderer & MAM (FFmpeg Worker)
 # ==========================================
+FROM packages-builder AS builder-renderer
+WORKDIR /app
+RUN pnpm build:renderer
+
 FROM base AS renderer
 WORKDIR /app
 RUN apk add --no-cache ffmpeg
@@ -74,7 +70,28 @@ RUN apk add --no-cache ffmpeg
 ENV NODE_ENV=production
 ENV PORT=4002
 
-COPY --from=builder /app ./
+COPY --from=builder-renderer /app ./
 
 EXPOSE 4002
 CMD ["node", "apps/renderer/dist/server.js"]
+
+# ==========================================
+# Target 3: MCR Web Studio (Next.js 15)
+# ==========================================
+FROM packages-builder AS builder-web
+WORKDIR /app
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+ARG NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}
+
+RUN pnpm build:web
+
+FROM base AS web
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=3000
+
+COPY --from=builder-web /app ./
+
+EXPOSE 3000
+CMD ["pnpm", "--filter", "@mcr/web", "start"]

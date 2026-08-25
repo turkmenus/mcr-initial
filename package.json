@@ -8,7 +8,12 @@
     "dev:web": "pnpm --filter @mcr/web dev",
     "dev:realtime": "pnpm --filter @mcr/realtime dev",
     "dev:renderer": "pnpm --filter @mcr/renderer dev",
-    "build": "pnpm --recursive build",
+    "build": "pnpm --filter \"./packages/*\" build && pnpm --filter \"./apps/*\" build",
+    "build:packages": "pnpm --filter \"./packages/*\" build",
+    "build:apps": "pnpm --filter \"./apps/*\" build",
+    "build:web": "pnpm --filter @mcr/web build",
+    "build:realtime": "pnpm --filter @mcr/realtime build",
+    "build:renderer": "pnpm --filter @mcr/renderer build",
     "test": "pnpm --recursive test",
     "lint": "pnpm --recursive lint"
   },
