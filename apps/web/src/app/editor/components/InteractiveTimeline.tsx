@@ -305,16 +305,25 @@ export function InteractiveTimeline({
     }
   };
 
-  // Handle Drag and Drop Media from Library onto Track
+  // Handle Drag and Drop Media from Library or Device onto Track
   const handleTrackDrop = (e: React.DragEvent<HTMLDivElement>, track: Track) => {
     e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const dropTime = Math.max(0, Math.min(duration, clickX / zoomLevel));
+
+    // Direct OS File Drop from User Device
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const file = e.dataTransfer.files[0];
+      onDropMediaToTrack?.(track.id, file, dropTime);
+      return;
+    }
+
+    // Dragged item from internal Media Library
     try {
       const raw = e.dataTransfer.getData("application/json");
       if (!raw) return;
       const item = JSON.parse(raw);
-      const rect = e.currentTarget.getBoundingClientRect();
-      const clickX = e.clientX - rect.left;
-      const dropTime = Math.max(0, Math.min(duration, clickX / zoomLevel));
       onDropMediaToTrack?.(track.id, item, dropTime);
     } catch {}
   };

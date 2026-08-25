@@ -293,28 +293,68 @@ export default function EditorPage() {
     };
   }, [isPlaying, project.duration]);
 
-  // Handle File Upload
-  const handleFileUpload = async (file: File) => {
+  // Handle File Upload from Device
+  const handleFileUpload = async (file: File, targetTrackId?: string, dropTime?: number) => {
     setIsUploading(true);
     setUploadProgress(`Yükleniyor: ${file.name}...`);
 
     try {
       const blobUrl = URL.createObjectURL(file);
+      const isVideo = file.type.startsWith("video");
+      const isAudio = file.type.startsWith("audio");
+
+      let realDuration = 10;
+      let width = 1920;
+      let height = 1080;
+      let thumbnail = blobUrl;
+
+      // Extract real video/audio metadata
+      if (isVideo) {
+        try {
+          const tempVideo = document.createElement("video");
+          tempVideo.preload = "metadata";
+          tempVideo.src = blobUrl;
+          await new Promise<void>((resolve) => {
+            tempVideo.onloadedmetadata = () => {
+              realDuration = tempVideo.duration || 10;
+              width = tempVideo.videoWidth || 1920;
+              height = tempVideo.videoHeight || 1080;
+              resolve();
+            };
+            tempVideo.onerror = () => resolve();
+          });
+        } catch {}
+      } else if (isAudio) {
+        try {
+          const tempAudio = document.createElement("audio");
+          tempAudio.preload = "metadata";
+          tempAudio.src = blobUrl;
+          await new Promise<void>((resolve) => {
+            tempAudio.onloadedmetadata = () => {
+              realDuration = tempAudio.duration || 10;
+              resolve();
+            };
+            tempAudio.onerror = () => resolve();
+          });
+        } catch {}
+      }
+
       const localAsset: MediaAsset = {
         id: `media_${Date.now()}`,
         filename: file.name,
         originalName: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
-        durationSeconds: 10,
-        width: 1920,
-        height: 1080,
+        durationSeconds: realDuration,
+        width,
+        height,
         fps: 50,
-        thumbnailUrl: blobUrl,
+        thumbnailUrl: thumbnail,
         filePath: blobUrl,
         createdAt: Date.now(),
       };
 
+      // Upload to backend in background for FFmpeg rendering
       try {
         const reader = new FileReader();
         reader.onload = async () => {
@@ -334,6 +374,41 @@ export default function EditorPage() {
       } catch {}
 
       setMediaAssets((prev) => [localAsset, ...prev]);
+
+      // If directly dropped onto a track
+      if (targetTrackId) {
+        const clipTime = dropTime !== undefined ? dropTime : currentTime;
+        const newClip: TimelineClip = isAudio
+          ? {
+              id: `clip_a_${Date.now()}`,
+              name: file.name,
+              type: "audio",
+              src: blobUrl,
+              start: clipTime,
+              duration: realDuration,
+              offset: 0,
+              volume: 0.9,
+              color: "#059669",
+            }
+          : {
+              id: `clip_v_${Date.now()}`,
+              name: file.name,
+              type: "video",
+              src: blobUrl,
+              start: clipTime,
+              duration: realDuration,
+              offset: 0,
+              volume: 1,
+              scale: 1,
+              opacity: 1,
+              color: "#2563EB",
+            };
+
+        const nextProject = addClipToTrack(project, targetTrackId, newClip);
+        pushStateToHistory(nextProject);
+        handleSelectClip(newClip.id);
+      }
+
       setUploadProgress("Dosya hazır!");
       setTimeout(() => setUploadProgress(""), 2000);
       setIsUploading(false);
@@ -937,6 +1012,11 @@ export default function EditorPage() {
               onAddMarker={handleAddMarker}
               onRemoveMarker={handleRemoveMarker}
               onDropMediaToTrack={(trackId, item, dropTime) => {
+                if (typeof window !== "undefined" && item instanceof File) {
+                  handleFileUpload(item, trackId, dropTime);
+                  return;
+                }
+
                 const isAudio = item.type === "audio";
                 const newClip: TimelineClip = isAudio
                   ? {
