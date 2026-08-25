@@ -23,6 +23,7 @@ import {
   Type,
   MousePointer,
   Sparkles,
+  Radio,
 } from "lucide-react";
 import { Slider } from "@/components/ui/slider";
 import {
@@ -56,6 +57,7 @@ interface InteractiveTimelineProps {
   onToggleTrackLock: (trackId: string) => void;
   onAddMarker: (time: number, label?: string) => void;
   onRemoveMarker: (markerId: string) => void;
+  onDropMediaToTrack?: (trackId: string, item: any, dropTime: number) => void;
 }
 
 type DragMode = "MOVE" | "TRIM_LEFT" | "TRIM_RIGHT" | null;
@@ -78,6 +80,7 @@ export function InteractiveTimeline({
   onToggleTrackLock,
   onAddMarker,
   onRemoveMarker,
+  onDropMediaToTrack,
 }: InteractiveTimelineProps) {
   const [zoomLevel, setZoomLevel] = useState(32); // pixels per second
   const [isSnappingEnabled, setIsSnappingEnabled] = useState(true);
@@ -245,7 +248,7 @@ export function InteractiveTimeline({
     e.preventDefault();
     e.stopPropagation();
 
-    // Select immediately on mousedown
+    // Select immediately
     onSelectClip(clip.id);
 
     if (activeTool === "razor") {
@@ -267,7 +270,7 @@ export function InteractiveTimeline({
     setCurrentDragDuration(clip.duration);
   };
 
-  // Handle Track Area Empty Click (Deselect / Move Playhead)
+  // Handle Track Area Empty Click
   const handleTrackLaneClick = (e: React.MouseEvent<HTMLDivElement>, track: Track) => {
     if (e.target === e.currentTarget) {
       const rect = e.currentTarget.getBoundingClientRect();
@@ -278,13 +281,27 @@ export function InteractiveTimeline({
     }
   };
 
+  // Handle Drag and Drop Media from Library onto Track
+  const handleTrackDrop = (e: React.DragEvent<HTMLDivElement>, track: Track) => {
+    e.preventDefault();
+    try {
+      const raw = e.dataTransfer.getData("application/json");
+      if (!raw) return;
+      const item = JSON.parse(raw);
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const dropTime = Math.max(0, Math.min(duration, clickX / zoomLevel));
+      onDropMediaToTrack?.(track.id, item, dropTime);
+    } catch {}
+  };
+
   return (
     <div className="flex-1 flex flex-col bg-[#111318] border-t border-[#222733] select-none overflow-hidden h-full">
-      {/* 1. NLE Timeline Action Toolbar */}
+      {/* 1. OpenCut NLE Toolbar */}
       <div className="h-8 px-2 bg-[#161a23] border-b border-[#222733] flex items-center justify-between flex-shrink-0">
-        {/* Left: Tools */}
+        {/* Left Tools */}
         <div className="flex items-center gap-1">
-          {/* Tool Modes */}
+          {/* Tool Selector */}
           <div className="flex items-center bg-[#0d1017] p-0.5 rounded border border-[#262d3d]">
             <button
               onClick={() => setActiveTool("select")}
@@ -314,7 +331,7 @@ export function InteractiveTimeline({
 
           <div className="h-3.5 w-px bg-[#262d3d] mx-1" />
 
-          {/* Quick Timeline Operations */}
+          {/* Operations */}
           <button
             onClick={() => selectedClipId && onSplitClip(selectedClipId, currentTime)}
             disabled={!selectedClipId}
@@ -367,7 +384,7 @@ export function InteractiveTimeline({
           </button>
         </div>
 
-        {/* Right: Zoom & Add Track */}
+        {/* Right Zoom & Track Add */}
         <div className="flex items-center gap-2">
           {/* Zoom Slider */}
           <div className="flex items-center gap-1 text-slate-400">
@@ -427,11 +444,11 @@ export function InteractiveTimeline({
         ref={timelineContainerRef}
         className="flex-1 flex overflow-x-auto overflow-y-auto relative bg-[#0a0c10]"
       >
-        {/* Left Fixed Track Headers Column (150px) */}
+        {/* Left Fixed Track Headers Column (140px) */}
         <div className="w-36 flex-shrink-0 sticky left-0 z-20 bg-[#12151d] border-r border-[#222733] shadow-lg flex flex-col">
           {/* Header corner */}
           <div className="h-6 bg-[#161a23] border-b border-[#222733] px-2 flex items-center text-[9px] font-mono font-bold text-slate-500 uppercase tracking-widest">
-            TRACKS
+            KANALLAR (TRACKS)
           </div>
 
           {/* Track Headers */}
@@ -566,6 +583,8 @@ export function InteractiveTimeline({
               <div
                 key={track.id}
                 onClick={(e) => handleTrackLaneClick(e, track)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleTrackDrop(e, track)}
                 className="h-12 border-b border-[#1c212c] relative bg-[#0d1016] hover:bg-[#10141c] transition"
               >
                 {/* Clips in Track */}
@@ -586,6 +605,7 @@ export function InteractiveTimeline({
                   const isGraphics = clip.type === "graphics";
                   const isText = clip.type === "text";
                   const isAudio = clip.type === "audio";
+                  const isVideo = clip.type === "video";
 
                   const clipColor = isGraphics
                     ? "#991B1B"
@@ -608,24 +628,54 @@ export function InteractiveTimeline({
                         e.stopPropagation();
                         onSelectClip(clip.id);
                       }}
-                      className={`absolute top-1 bottom-1 rounded-sm text-white flex items-center justify-between px-1.5 cursor-grab active:cursor-grabbing select-none transition-all ${
+                      className={`absolute top-1 bottom-1 rounded-sm text-white flex items-center justify-between px-1.5 cursor-grab active:cursor-grabbing select-none transition-all overflow-hidden ${
                         isSelected
                           ? "ring-2 ring-[#00e5ff] z-10 shadow-lg border border-white/40"
                           : "border border-black/40 hover:brightness-110"
                       } ${isDragging ? "opacity-75 z-20" : ""}`}
                     >
+                      {/* OpenCut Waveform Visualization for Audio Clips */}
+                      {isAudio && (
+                        <div className="absolute inset-0 opacity-40 overflow-hidden pointer-events-none flex items-center justify-around px-1 z-0">
+                          {Array.from({ length: Math.min(80, Math.floor(clipWidth / 4)) }).map((_, waveIdx) => {
+                            const h = 25 + Math.sin(waveIdx * 0.4) * 20 + ((waveIdx * 13) % 25);
+                            return (
+                              <div
+                                key={waveIdx}
+                                style={{ height: `${h}%` }}
+                                className="w-0.5 bg-emerald-200 rounded-full"
+                              />
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* OpenCut Filmstrip Ribbon for Video Clips */}
+                      {isVideo && (
+                        <div className="absolute inset-0 opacity-20 overflow-hidden pointer-events-none flex items-center justify-start gap-4 pl-1 z-0">
+                          {Array.from({ length: Math.min(30, Math.floor(clipWidth / 48)) }).map((_, fIdx) => (
+                            <div
+                              key={fIdx}
+                              className="w-9 h-7 border border-sky-300/40 rounded-xs bg-black/40 flex items-center justify-center"
+                            >
+                              <Film className="w-3 h-3 text-sky-200 opacity-70" />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
                       {/* Left Trim Handle */}
                       <div
                         onMouseDown={(e) => startClipDrag(e, clip, "TRIM_LEFT")}
-                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-l-sm"
+                        className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-l-sm z-10"
                       />
 
                       {/* Clip Title & Duration */}
-                      <div className="min-w-0 flex items-center gap-1 overflow-hidden pointer-events-none">
-                        <span className="text-[10px] font-semibold truncate leading-none">
+                      <div className="min-w-0 flex items-center gap-1 overflow-hidden pointer-events-none z-10">
+                        <span className="text-[10px] font-semibold truncate leading-none drop-shadow">
                           {clip.name}
                         </span>
-                        <span className="text-[8px] font-mono opacity-60">
+                        <span className="text-[8px] font-mono opacity-70 drop-shadow">
                           {displayDuration.toFixed(1)}s
                         </span>
                       </div>
@@ -633,7 +683,7 @@ export function InteractiveTimeline({
                       {/* Right Trim Handle */}
                       <div
                         onMouseDown={(e) => startClipDrag(e, clip, "TRIM_RIGHT")}
-                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-r-sm"
+                        className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/50 rounded-r-sm z-10"
                       />
                     </div>
                   );

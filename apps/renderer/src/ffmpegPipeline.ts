@@ -45,6 +45,19 @@ export async function isNvencAvailable(): Promise<boolean> {
   });
 }
 
+function resolveMediaFilePath(src: string): string | null {
+  if (!src) return null;
+  const candidates = [
+    path.resolve(process.cwd(), src.replace(/^\//, "")),
+    path.resolve(process.cwd(), "uploads", path.basename(src)),
+    path.resolve(process.cwd(), "apps/web/public", src.replace(/^\//, "")),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
 export async function renderTimelineToVideo(
   project: TimelineProject,
   presetId = "broadcast-16:9",
@@ -57,29 +70,24 @@ export async function renderTimelineToVideo(
   const preset = getPreset(presetId) || getPreset("broadcast-16:9")!;
   const outputFileName = `master_${project.id.replace(/[^a-zA-Z0-9_-]/g, "_")}_${Date.now()}.${preset.container}`;
   const outputPath = path.resolve(outputDir, outputFileName);
+  const isGpu = await isNvencAvailable();
+  const targetEncoderArgs = getPresetFfmpegArgs(preset, isGpu);
+  const totalDuration = Math.max(1, project.duration || 10);
 
-  const useGpu = await isNvencAvailable();
-  const targetEncoderArgs = getPresetFfmpegArgs(preset, useGpu);
-  const totalDuration = Math.max(1, project.duration || 15);
+  const videoClips = project.tracks.filter((t) => t.type === "video").flatMap((t) => t.clips) as VideoClip[];
+  const textClips = project.tracks.filter((t) => t.type === "text").flatMap((t) => t.clips) as TextClip[];
+  const graphicsClips = project.tracks.filter((t) => t.type === "graphics").flatMap((t) => t.clips) as GraphicsOverlayClip[];
 
-  // Collect active clips by category
-  const allClips = project.tracks.flatMap((t) => t.clips);
-  const textClips = allClips.filter((c) => c.type === "text") as TextClip[];
-  const graphicsClips = allClips.filter((c) => c.type === "graphics") as GraphicsOverlayClip[];
-  const videoClips = allClips.filter((c) => c.type === "video") as VideoClip[];
-
-  // Find any real uploaded files on disk
-  const realFileClips = videoClips.filter((c) => {
-    if (!c.src) return false;
-    const localUploadPath = path.resolve(process.cwd(), c.src.replace(/^\//, ""));
-    return fs.existsSync(localUploadPath);
-  });
+  // Find any real video files on disk
+  const realFileClips = videoClips
+    .map((c) => ({ clip: c, resolvedPath: resolveMediaFilePath(c.src) }))
+    .filter((x): x is { clip: VideoClip; resolvedPath: string } => x.resolvedPath !== null);
 
   return new Promise((resolve, reject) => {
-    // If a real uploaded video exists on the timeline, process and overlay graphics
+    // If real video files exist on the timeline, process and overlay graphics
     if (realFileClips.length > 0) {
       const primaryClip = realFileClips[0];
-      const localFilePath = path.resolve(process.cwd(), primaryClip.src.replace(/^\//, ""));
+      const localFilePath = primaryClip.resolvedPath;
 
       const filterChains: string[] = [
         `[0:v]scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p[base_v]`,

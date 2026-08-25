@@ -124,7 +124,7 @@ export default function EditorPage() {
         id: "clip_v1",
         name: "Ana Haber Stüdyosu (Canlı)",
         type: "video",
-        src: "synthetic://studio",
+        src: "/media/studio_anchor.mp4",
         start: 0,
         duration: 12,
         offset: 0,
@@ -138,7 +138,7 @@ export default function EditorPage() {
         id: "clip_v2",
         name: "Şehir & Trafik B-Roll",
         type: "video",
-        src: "synthetic://city",
+        src: "/media/breaking_broll.mp4",
         start: 12,
         duration: 16,
         offset: 0,
@@ -156,9 +156,9 @@ export default function EditorPage() {
         id: "clip_a1",
         name: "Muhabir Seslendirme (VO)",
         type: "audio",
-        src: "synthetic://audio_voice",
+        src: "/media/reporter_voice.mp3",
         start: 0,
-        duration: 28,
+        duration: 20,
         offset: 0,
         volume: 0.9,
         fadeIn: 0.5,
@@ -173,9 +173,9 @@ export default function EditorPage() {
         id: "clip_a2",
         name: "Haber Açılış Jingle",
         type: "audio",
-        src: "synthetic://audio_jingle",
+        src: "/media/broadcast_jingle.mp3",
         start: 0,
-        duration: 6,
+        duration: 10,
         offset: 0,
         volume: 0.7,
         fadeIn: 0.2,
@@ -929,6 +929,38 @@ export default function EditorPage() {
               onToggleTrackLock={handleToggleTrackLock}
               onAddMarker={handleAddMarker}
               onRemoveMarker={handleRemoveMarker}
+              onDropMediaToTrack={(trackId, item, dropTime) => {
+                const isAudio = item.type === "audio";
+                const newClip: TimelineClip = isAudio
+                  ? {
+                      id: `clip_a_${Date.now()}`,
+                      name: item.name,
+                      type: "audio",
+                      src: item.src,
+                      start: dropTime,
+                      duration: item.duration || 10,
+                      offset: 0,
+                      volume: 0.9,
+                      color: "#059669",
+                    }
+                  : {
+                      id: `clip_v_${Date.now()}`,
+                      name: item.name,
+                      type: "video",
+                      src: item.src,
+                      start: dropTime,
+                      duration: item.duration || 10,
+                      offset: 0,
+                      volume: 1,
+                      scale: 1,
+                      opacity: 1,
+                      color: "#2563EB",
+                    };
+
+                const nextProject = addClipToTrack(project, trackId, newClip);
+                pushStateToHistory(nextProject);
+                handleSelectClip(newClip.id);
+              }}
             />
           </div>
         </div>

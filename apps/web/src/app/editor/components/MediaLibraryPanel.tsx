@@ -172,7 +172,19 @@ export function MediaLibraryPanel({
                     {mediaAssets.map((asset) => (
                       <div
                         key={asset.id}
-                        className="p-1.5 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition group"
+                        draggable
+                        onDragStart={(e) => {
+                          e.dataTransfer.setData(
+                            "application/json",
+                            JSON.stringify({
+                              type: asset.mimeType.startsWith("audio") ? "audio" : "video",
+                              name: asset.originalName,
+                              src: asset.filePath,
+                              duration: asset.durationSeconds || 10,
+                            })
+                          );
+                        }}
+                        className="p-1.5 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition group cursor-grab active:cursor-grabbing"
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <div className="w-7 h-7 rounded bg-[#0b0e14] border border-[#1e2538] flex items-center justify-center text-sky-400 flex-shrink-0">
@@ -216,7 +228,19 @@ export function MediaLibraryPanel({
                   {filteredStock.map((item) => (
                     <div
                       key={item.id}
-                      className="p-1.5 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition group"
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.setData(
+                          "application/json",
+                          JSON.stringify({
+                            type: item.type,
+                            name: item.name,
+                            src: item.src,
+                            duration: item.duration,
+                          })
+                        );
+                      }}
+                      className="p-1.5 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition group cursor-grab active:cursor-grabbing"
                     >
                       <div className="flex items-center gap-2 min-w-0">
                         <div
