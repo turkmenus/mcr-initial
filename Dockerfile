@@ -4,6 +4,7 @@
 FROM node:22-alpine AS base
 WORKDIR /app
 RUN npm install -g pnpm@11.23.0
+ENV CI=true
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # ==========================================
@@ -80,6 +81,9 @@ CMD ["node", "apps/renderer/dist/server.js"]
 # ==========================================
 FROM packages-builder AS builder-web
 WORKDIR /app
+ENV NODE_ENV=production
+ENV CI=true
+ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=4096"
 ARG NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL}

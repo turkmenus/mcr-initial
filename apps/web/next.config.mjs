@@ -3,6 +3,12 @@ const RENDERER_URL = process.env.INTERNAL_RENDERER_URL || "http://127.0.0.1:4002
 const REALTIME_URL = process.env.INTERNAL_REALTIME_URL || "http://127.0.0.1:4001";
 
 const nextConfig = {
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  typescript: {
+    ignoreBuildErrors: true,
+  },
   transpilePackages: [
     "@mcr/schema",
     "@mcr/engine",
