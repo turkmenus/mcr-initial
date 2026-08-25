@@ -9,6 +9,10 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  experimental: {
+    cpus: 1,
+    workerThreads: false,
+  },
   transpilePackages: [
     "@mcr/schema",
     "@mcr/engine",
