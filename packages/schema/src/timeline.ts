@@ -9,7 +9,11 @@ export const ClipBaseSchema = z.object({
   start: z.number(), // timeline start time in seconds
   duration: z.number(), // duration on timeline in seconds
   offset: z.number().optional(), // start offset in source media in seconds
+  trimStart: z.number().optional(), // in-point in source media in seconds (OpenCut 4-point timing)
+  trimEnd: z.number().optional(), // out-point in source media in seconds
   sourceDuration: z.number().optional(), // total source media duration in seconds
+  intrinsicWidth: z.number().optional(), // native width of media element
+  intrinsicHeight: z.number().optional(), // native height of media element
   color: z.string().optional(),
 });
 

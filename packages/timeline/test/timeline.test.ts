@@ -15,6 +15,9 @@ import {
   fitTimelineDuration,
   addMarker,
   removeMarker,
+  moveMultipleClips,
+  buildWaveformSampleBuckets,
+  sampleWaveformRange,
   formatTimecode,
   parseTimecode,
   getActiveTimelineFrame,
@@ -280,6 +283,51 @@ describe("Timeline EDL Operations and Frame Queries", () => {
 
     const fitted = fitTimelineDuration(project, 5);
     expect(fitted.duration).toBe(60); // 20 + 35 + 5 = 60
+  });
+
+  it("should move multiple selected clips together preserving relative distances", () => {
+    let project = createDefaultTimelineProject();
+    project = addClipToTrack(project, "track_video_1", {
+      id: "c1",
+      name: "Clip 1",
+      type: "video",
+      src: "1.mp4",
+      start: 5,
+      duration: 10,
+      offset: 0,
+    });
+    project = addClipToTrack(project, "track_audio_1", {
+      id: "c2",
+      name: "Clip 2",
+      type: "audio",
+      src: "2.mp3",
+      start: 12,
+      duration: 6,
+      offset: 0,
+    });
+
+    const moved = moveMultipleClips(project, ["c1", "c2"], 3);
+    const v1 = moved.tracks.find((t) => t.id === "track_video_1")!.clips.find((c) => c.id === "c1")!;
+    const a1 = moved.tracks.find((t) => t.id === "track_audio_1")!.clips.find((c) => c.id === "c2")!;
+
+    expect(v1.start).toBe(8);
+    expect(a1.start).toBe(15);
+  });
+
+  it("should compute waveform buckets with true peak and RMS energy", () => {
+    const pcmData = new Float32Array(48000); // 1 second of 48kHz audio
+    for (let i = 0; i < pcmData.length; i++) {
+      pcmData[i] = Math.sin((i / 48000) * Math.PI * 2 * 440) * 0.8; // 440Hz tone at 0.8 amplitude
+    }
+
+    const summary = buildWaveformSampleBuckets(pcmData, 48000, 100);
+    expect(summary.bucketCount).toBe(100);
+    expect(summary.peaks[0]).toBeGreaterThan(0.7);
+    expect(summary.rms[0]).toBeGreaterThan(0.3);
+
+    const sampled = sampleWaveformRange(summary, 0, 0.5, 50);
+    expect(sampled.peaks.length).toBe(50);
+    expect(sampled.rms.length).toBe(50);
   });
 });
 

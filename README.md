@@ -187,8 +187,11 @@ Test edilen modüller:
 
 ## 📄 Lisans ve Teşekkürler
 
+* **OpenCut:** MCR video kurgu editör modülü mimarisi, zaman çizelgesi ses dalga formu analizi, doğrudan monitör dönüşüm katmanı (`TransformHandles`), 4 noktalı EDL zamanlama modeli ve çoklu seçim altyapısında [OpenCut](https://github.com/opencut-app/opencut) ([opencut-classic](https://github.com/opencut-app/opencut-classic)) açık kaynak kodları ve algoritmalarından yararlanılmıştır.
+  * **OpenCut License:** Copyright (c) 2024-2026 OpenCut Contributors — [MIT License](https://opensource.org/licenses/MIT).
 * **OGraf Specification:** EBU (European Broadcasting Union) Açık Yayın Grafiği Standardı ([spec.ograf.dev](https://spec.ograf.dev)).
 * **CasparCG Server:** Sveriges Television (SVT) Açık Kaynak Yayın Motoru ([casparcg.com](https://casparcg.com)).
 * **Open-Meteo:** Açık Meteoroloji API Servisi ([open-meteo.com](https://open-meteo.com)).
 * **MapLibre GL:** Açık Kaynak Harita Motoru ([maplibre.org](https://maplibre.org)).
 * **GSAP:** GreenSock Yüksek Performanslı Animasyon Kütüphanesi.
+

@@ -40,14 +40,18 @@ import {
   Marker,
 } from "@mcr/schema";
 import { formatTimecode } from "@mcr/timeline";
+import { AudioWaveformCanvas } from "./AudioWaveformCanvas";
 
 interface InteractiveTimelineProps {
   project: TimelineProject;
   currentTime: number;
   selectedClipId: string | null;
+  selectedClipIds?: string[];
   onSelectClip: (clipId: string | null) => void;
+  onSelectMultipleClips?: (clipIds: string[]) => void;
   onSeek: (time: number) => void;
   onMoveClip: (clipId: string, newStart: number, targetTrackId?: string) => void;
+  onMoveMultipleClips?: (clipIds: string[], deltaTime: number) => void;
   onTrimClip: (clipId: string, newStart: number, newDuration: number, newOffset?: number) => void;
   onSplitClip: (clipId: string, splitTime: number) => void;
   onDeleteClip: (clipId: string) => void;
@@ -70,9 +74,12 @@ export function InteractiveTimeline({
   project,
   currentTime,
   selectedClipId,
+  selectedClipIds = [],
   onSelectClip,
+  onSelectMultipleClips,
   onSeek,
   onMoveClip,
+  onMoveMultipleClips,
   onTrimClip,
   onSplitClip,
   onDeleteClip,
@@ -95,6 +102,11 @@ export function InteractiveTimeline({
   const timelineContainerRef = useRef<HTMLDivElement | null>(null);
   const rulerRef = useRef<HTMLDivElement | null>(null);
 
+  // Active Multi-Selection Set
+  const effectiveSelectedIds = new Set<string>(
+    selectedClipIds.length > 0 ? selectedClipIds : selectedClipId ? [selectedClipId] : []
+  );
+
   // Clip Dragging State (2D: Time X + Target Track Y)
   const [draggingClipId, setDraggingClipId] = useState<string | null>(null);
   const [draggingSourceTrackId, setDraggingSourceTrackId] = useState<string | null>(null);
@@ -108,6 +120,11 @@ export function InteractiveTimeline({
   const [currentDragStart, setCurrentDragStart] = useState<number | null>(null);
   const [currentDragDuration, setCurrentDragDuration] = useState<number | null>(null);
   const [isScrubbingRuler, setIsScrubbingRuler] = useState(false);
+
+  // Marquee Selection Box Dragging State
+  const [isMarqueeSelecting, setIsMarqueeSelecting] = useState(false);
+  const [marqueeStart, setMarqueeStart] = useState<{ x: number; y: number } | null>(null);
+  const [marqueeEnd, setMarqueeEnd] = useState<{ x: number; y: number } | null>(null);
 
   // Track Header Layer Reordering State
   const [headerDragSourceId, setHeaderDragSourceId] = useState<string | null>(null);
@@ -165,7 +182,7 @@ export function InteractiveTimeline({
     onSeek(time);
   };
 
-  // Global Mouse Move & Up Handler (2D cross-track drag)
+  // Global Mouse Move & Up Handler (2D cross-track drag + marquee)
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (isScrubbingRuler && rulerRef.current) {
@@ -173,6 +190,14 @@ export function InteractiveTimeline({
         const clickX = e.clientX - rect.left;
         const time = Math.max(0, Math.min(duration, clickX / zoomLevel));
         onSeek(time);
+      }
+
+      if (isMarqueeSelecting && timelineContainerRef.current) {
+        const rect = timelineContainerRef.current.getBoundingClientRect();
+        setMarqueeEnd({
+          x: e.clientX - rect.left + timelineContainerRef.current.scrollLeft,
+          y: e.clientY - rect.top + timelineContainerRef.current.scrollTop,
+        });
       }
 
       if (draggingClipId && dragMode) {
@@ -183,7 +208,6 @@ export function InteractiveTimeline({
         const deltaTime = deltaX / zoomLevel;
         const snapPoints = getSnapPoints(draggingClipId);
 
-        // Detect vertical track lane hover
         if (dragMode === "MOVE") {
           const rawNewStart = initialClipStart + deltaTime;
           const snappedStart = snapToPoints(rawNewStart, snapPoints);
@@ -221,10 +245,43 @@ export function InteractiveTimeline({
         setIsScrubbingRuler(false);
       }
 
+      if (isMarqueeSelecting && marqueeStart && marqueeEnd) {
+        // Compute hit tests for intersecting clips
+        const minX = Math.min(marqueeStart.x, marqueeEnd.x);
+        const maxX = Math.max(marqueeStart.x, marqueeEnd.x);
+        const startTime = (minX - 192) / zoomLevel; // minus 192px left header
+        const endTime = (maxX - 192) / zoomLevel;
+
+        const selectedIds: string[] = [];
+        project.tracks.forEach((t) => {
+          t.clips.forEach((c) => {
+            const cStart = c.start;
+            const cEnd = c.start + c.duration;
+            if (cStart < endTime && cEnd > startTime) {
+              selectedIds.push(c.id);
+            }
+          });
+        });
+
+        if (selectedIds.length > 0) {
+          onSelectMultipleClips?.(selectedIds);
+          onSelectClip(selectedIds[0]);
+        }
+        setIsMarqueeSelecting(false);
+        setMarqueeStart(null);
+        setMarqueeEnd(null);
+      }
+
       if (draggingClipId && dragMode) {
         if (hasMovedDuringDrag) {
           if (dragMode === "MOVE" && currentDragStart !== null) {
-            onMoveClip(draggingClipId, currentDragStart, targetDropTrackId || undefined);
+            const deltaTime = currentDragStart - initialClipStart;
+            // If multiple clips selected and this clip is part of group
+            if (effectiveSelectedIds.size > 1 && effectiveSelectedIds.has(draggingClipId) && onMoveMultipleClips) {
+              onMoveMultipleClips(Array.from(effectiveSelectedIds), deltaTime);
+            } else {
+              onMoveClip(draggingClipId, currentDragStart, targetDropTrackId || undefined);
+            }
           } else if (dragMode === "TRIM_LEFT" && currentDragStart !== null && currentDragDuration !== null) {
             const deltaStart = currentDragStart - initialClipStart;
             const newOffset = initialClipOffset + deltaStart;
@@ -252,6 +309,9 @@ export function InteractiveTimeline({
     };
   }, [
     isScrubbingRuler,
+    isMarqueeSelecting,
+    marqueeStart,
+    marqueeEnd,
     draggingClipId,
     dragMode,
     dragStartX,
@@ -261,17 +321,22 @@ export function InteractiveTimeline({
     currentDragStart,
     currentDragDuration,
     hasMovedDuringDrag,
+    effectiveSelectedIds,
     zoomLevel,
     duration,
+    project,
     getSnapPoints,
     snapToPoints,
     onSeek,
     onMoveClip,
+    onMoveMultipleClips,
     onTrimClip,
+    onSelectClip,
+    onSelectMultipleClips,
     targetDropTrackId,
   ]);
 
-  // Start Dragging Clip
+  // Start Dragging Clip (supporting Shift+Click multi selection)
   const handleClipMouseDown = (
     e: React.MouseEvent<HTMLDivElement>,
     clip: TimelineClip,
@@ -281,8 +346,23 @@ export function InteractiveTimeline({
     e.preventDefault();
     e.stopPropagation();
 
-    // Select immediately
-    onSelectClip(clip.id);
+    // Multi-selection with Shift key
+    if (e.shiftKey) {
+      const nextSet = new Set(effectiveSelectedIds);
+      if (nextSet.has(clip.id)) {
+        nextSet.delete(clip.id);
+      } else {
+        nextSet.add(clip.id);
+      }
+      const arr = Array.from(nextSet);
+      onSelectMultipleClips?.(arr);
+      onSelectClip(arr[0] || null);
+    } else {
+      if (!effectiveSelectedIds.has(clip.id)) {
+        onSelectMultipleClips?.([clip.id]);
+        onSelectClip(clip.id);
+      }
+    }
 
     if (activeTool === "razor") {
       const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -300,19 +380,32 @@ export function InteractiveTimeline({
     setHasMovedDuringDrag(false);
     setInitialClipStart(clip.start);
     setInitialClipDuration(clip.duration);
-    setInitialClipOffset(clip.offset ?? 0);
+    setInitialClipOffset(clip.offset ?? clip.trimStart ?? 0);
     setCurrentDragStart(clip.start);
     setCurrentDragDuration(clip.duration);
   };
 
-  // Handle Track Area Empty Click
-  const handleTrackLaneClick = (e: React.MouseEvent<HTMLDivElement>, track: Track) => {
-    if (e.target === e.currentTarget) {
+  // Handle Track Area Empty Click & Marquee Drag
+  const handleTrackLaneMouseDown = (e: React.MouseEvent<HTMLDivElement>, track: Track) => {
+    if (e.target === e.currentTarget && !e.shiftKey) {
       const rect = e.currentTarget.getBoundingClientRect();
       const clickX = e.clientX - rect.left;
       const clickTime = Math.max(0, Math.min(duration, clickX / zoomLevel));
       onSeek(clickTime);
       onSelectClip(null);
+      onSelectMultipleClips?.([]);
+
+      // Start Marquee Selection Box
+      if (timelineContainerRef.current) {
+        const containerRect = timelineContainerRef.current.getBoundingClientRect();
+        setIsMarqueeSelecting(true);
+        const startPt = {
+          x: e.clientX - containerRect.left + timelineContainerRef.current.scrollLeft,
+          y: e.clientY - containerRect.top + timelineContainerRef.current.scrollTop,
+        };
+        setMarqueeStart(startPt);
+        setMarqueeEnd(startPt);
+      }
     }
   };
 
@@ -342,7 +435,7 @@ export function InteractiveTimeline({
   // Zoom to fit
   const handleZoomToFit = () => {
     if (!timelineContainerRef.current) return;
-    const visibleWidth = timelineContainerRef.current.clientWidth - 180; // track header offset
+    const visibleWidth = timelineContainerRef.current.clientWidth - 192; // track header offset
     if (visibleWidth > 200 && duration > 0) {
       const targetZoom = Math.max(10, Math.min(120, visibleWidth / duration));
       setZoomLevel(targetZoom);
@@ -448,6 +541,13 @@ export function InteractiveTimeline({
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
+          )}
+
+          {/* Multi-Selection Counter Indicator */}
+          {effectiveSelectedIds.size > 1 && (
+            <span className="px-2 py-0.5 rounded bg-sky-950/60 text-sky-300 border border-sky-500/40 text-[9px] font-bold">
+              {effectiveSelectedIds.size} Klip Seçili (Grup)
+            </span>
           )}
         </div>
 
@@ -704,7 +804,7 @@ export function InteractiveTimeline({
                 <div
                   key={track.id}
                   data-track-lane-id={track.id}
-                  onClick={(e) => handleTrackLaneClick(e, track)}
+                  onMouseDown={(e) => handleTrackLaneMouseDown(e, track)}
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => handleTrackDrop(e, track)}
                   className={`h-14 border-b border-[#1f2638] relative transition ${
@@ -715,7 +815,7 @@ export function InteractiveTimeline({
                 >
                   {/* Clips on this Track */}
                   {track.clips.map((clip) => {
-                    const isSelected = selectedClipId === clip.id;
+                    const isSelected = effectiveSelectedIds.has(clip.id);
                     const isCurrentlyDragging = draggingClipId === clip.id;
 
                     const displayStart =
@@ -759,30 +859,24 @@ export function InteractiveTimeline({
                         } ${isCurrentlyDragging ? "opacity-90 shadow-2xl scale-[1.01]" : ""}`}
                       >
                         {/* Clip Top Header Label */}
-                        <div className="px-1.5 py-0.5 flex items-center justify-between text-[10px] font-bold text-white drop-shadow truncate pointer-events-none">
+                        <div className="px-1.5 py-0.5 flex items-center justify-between text-[10px] font-bold text-white drop-shadow truncate pointer-events-none z-10">
                           <span className="truncate">{clip.name}</span>
                           <span className="text-[8px] font-mono opacity-80 pl-1">
                             {displayDuration.toFixed(1)}s
                           </span>
                         </div>
 
-                        {/* Visual Ribbon: Waveform for Audio, Filmstrip for Video */}
-                        {isAudioClip && (
-                          <div className="flex-1 flex items-center px-1 opacity-75 pointer-events-none">
-                            <div className="w-full h-4 flex items-center gap-[2px] overflow-hidden">
-                              {Array.from({ length: Math.min(80, Math.floor(widthPx / 4)) }).map(
-                                (_, i) => {
-                                  const h = 20 + Math.sin(i * 0.7) * 15 + Math.cos(i * 1.3) * 10;
-                                  return (
-                                    <div
-                                      key={i}
-                                      className="w-[2px] bg-white/70 rounded-full"
-                                      style={{ height: `${Math.max(4, h)}%` }}
-                                    />
-                                  );
-                                }
-                              )}
-                            </div>
+                        {/* Real OpenCut Audio Waveform Canvas for Audio / Video Clips */}
+                        {(isAudioClip || isVideoClip) && clip.src && (
+                          <div className="absolute inset-0 top-3 bottom-0 px-0.5 pointer-events-none opacity-80">
+                            <AudioWaveformCanvas
+                              src={clip.src}
+                              clipStart={clip.start}
+                              clipDuration={clip.duration}
+                              clipOffset={clip.offset || clip.trimStart || 0}
+                              pixelsPerSecond={zoomLevel}
+                              color={isAudioClip ? "rgba(255, 255, 255, 0.75)" : "rgba(186, 230, 253, 0.6)"}
+                            />
                           </div>
                         )}
 
@@ -807,7 +901,20 @@ export function InteractiveTimeline({
             })}
           </div>
 
-          {/* 3. Global Playhead Line (CTI) */}
+          {/* 3. Marquee Selection Box Overlay */}
+          {isMarqueeSelecting && marqueeStart && marqueeEnd && (
+            <div
+              style={{
+                left: `${Math.min(marqueeStart.x, marqueeEnd.x)}px`,
+                top: `${Math.min(marqueeStart.y, marqueeEnd.y)}px`,
+                width: `${Math.abs(marqueeEnd.x - marqueeStart.x)}px`,
+                height: `${Math.abs(marqueeEnd.y - marqueeStart.y)}px`,
+              }}
+              className="absolute border-2 border-sky-400 border-dashed bg-sky-500/15 pointer-events-none z-30 shadow-sm"
+            />
+          )}
+
+          {/* 4. Global Playhead Line (CTI) */}
           <div
             style={{ left: `${currentTime * zoomLevel}px` }}
             className="absolute top-0 bottom-0 pointer-events-none z-40 flex flex-col items-center"

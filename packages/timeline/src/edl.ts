@@ -280,7 +280,7 @@ export function splitClip(
 }
 
 /**
- * Trims a clip's in/out points
+ * Trims a clip's in/out points with OpenCut 4-point source boundary protection
  */
 export function trimClip(
   project: TimelineProject,
@@ -294,16 +294,69 @@ export function trimClip(
     updatedAt: Date.now(),
     tracks: project.tracks.map((track) => ({
       ...track,
-      clips: track.clips.map((clip) => {
-        if (clip.id !== clipId) return clip;
-        const curOffset = clip.offset ?? 0;
-        return {
-          ...clip,
-          start: Math.max(0, newStart),
-          duration: Math.max(0.1, newDuration),
-          offset: newOffset !== undefined ? Math.max(0, newOffset) : curOffset,
-        };
-      }).sort((a, b) => a.start - b.start),
+      clips: track.clips
+        .map((clip) => {
+          if (clip.id !== clipId) return clip;
+          const curOffset = clip.offset ?? clip.trimStart ?? 0;
+          let targetOffset = newOffset !== undefined ? Math.max(0, newOffset) : curOffset;
+          let targetDuration = Math.max(0.1, newDuration);
+
+          // If sourceDuration is defined, enforce strict upper bound
+          if (clip.sourceDuration && clip.sourceDuration > 0) {
+            targetOffset = Math.min(targetOffset, Math.max(0, clip.sourceDuration - 0.1));
+            targetDuration = Math.min(targetDuration, clip.sourceDuration - targetOffset);
+          }
+
+          return {
+            ...clip,
+            start: Math.max(0, newStart),
+            duration: targetDuration,
+            offset: targetOffset,
+            trimStart: targetOffset,
+            trimEnd: targetOffset + targetDuration,
+          };
+        })
+        .sort((a, b) => a.start - b.start),
+    })),
+  };
+}
+
+/**
+ * Moves multiple selected clips together (Group Move) preserving relative timing and offsets
+ */
+export function moveMultipleClips(
+  project: TimelineProject,
+  clipIds: string[],
+  deltaTime: number
+): TimelineProject {
+  if (clipIds.length === 0 || deltaTime === 0) return project;
+
+  // Find min start to prevent moving before 0s
+  let minStart = Infinity;
+  project.tracks.forEach((t) => {
+    t.clips.forEach((c) => {
+      if (clipIds.includes(c.id)) {
+        if (c.start < minStart) minStart = c.start;
+      }
+    });
+  });
+
+  const effectiveDelta = minStart + deltaTime < 0 ? -minStart : deltaTime;
+
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips
+        .map((clip) => {
+          if (!clipIds.includes(clip.id)) return clip;
+          return {
+            ...clip,
+            start: Math.max(0, clip.start + effectiveDelta),
+          };
+        })
+        .sort((a, b) => a.start - b.start),
     })),
   };
 }

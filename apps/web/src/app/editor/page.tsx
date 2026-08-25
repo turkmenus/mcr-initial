@@ -55,6 +55,7 @@ import {
   removeTrack,
   reorderTracks,
   rippleDeleteClip,
+  moveMultipleClips,
   updateTrack,
   addMarker,
   removeMarker,
@@ -226,12 +227,16 @@ export default function EditorPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
   const [selectedClipId, setSelectedClipId] = useState<string | null>("clip_g1");
+  const [selectedClipIds, setSelectedClipIds] = useState<string[]>(["clip_g1"]);
 
   // Auto open inspector on clip selection
   const handleSelectClip = (clipId: string | null) => {
     setSelectedClipId(clipId);
     if (clipId) {
+      setSelectedClipIds([clipId]);
       setIsInspectorDrawerOpen(true);
+    } else {
+      setSelectedClipIds([]);
     }
   };
 
@@ -547,6 +552,11 @@ export default function EditorPage() {
   // Timeline Mutations
   const handleMoveClip = (clipId: string, newStart: number, targetTrackId?: string) => {
     const nextProject = moveClip(project, clipId, newStart, targetTrackId);
+    pushStateToHistory(nextProject);
+  };
+
+  const handleMoveMultipleClips = (clipIds: string[], deltaTime: number) => {
+    const nextProject = moveMultipleClips(project, clipIds, deltaTime);
     pushStateToHistory(nextProject);
   };
 
@@ -983,6 +993,8 @@ export default function EditorPage() {
                   project={project}
                   currentTime={currentTime}
                   isPlaying={isPlaying}
+                  selectedClip={selectedClip}
+                  onUpdateClipTransform={(id, partial) => handleUpdateClip(id, partial)}
                   onTogglePlay={() => setIsPlaying(!isPlaying)}
                   onSeek={setCurrentTime}
                   aspectRatio={aspectRatio}
@@ -1023,9 +1035,12 @@ export default function EditorPage() {
               project={project}
               currentTime={currentTime}
               selectedClipId={selectedClipId}
+              selectedClipIds={selectedClipIds}
               onSelectClip={handleSelectClip}
+              onSelectMultipleClips={setSelectedClipIds}
               onSeek={setCurrentTime}
               onMoveClip={handleMoveClip}
+              onMoveMultipleClips={handleMoveMultipleClips}
               onTrimClip={handleTrimClip}
               onSplitClip={handleSplitClip}
               onDeleteClip={handleDeleteClip}

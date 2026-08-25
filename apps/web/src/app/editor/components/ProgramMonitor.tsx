@@ -28,11 +28,14 @@ import {
 } from "@mcr/schema";
 import { getActiveTimelineFrame, formatTimecode } from "@mcr/timeline";
 import { audioEngine } from "./AudioEngine";
+import { TransformHandles } from "./TransformHandles";
 
 interface ProgramMonitorProps {
   project: TimelineProject;
   currentTime: number;
   isPlaying: boolean;
+  selectedClip?: TimelineClip | null;
+  onUpdateClipTransform?: (clipId: string, partial: { scale?: number; x?: number; y?: number; rotation?: number }) => void;
   onTogglePlay: () => void;
   onSeek?: (time: number) => void;
   aspectRatio?: "16:9" | "9:16" | "1:1";
@@ -44,6 +47,8 @@ export function ProgramMonitor({
   project,
   currentTime,
   isPlaying,
+  selectedClip,
+  onUpdateClipTransform,
   onTogglePlay,
   onSeek,
   aspectRatio = "16:9",
@@ -52,6 +57,8 @@ export function ProgramMonitor({
 }: ProgramMonitorProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewportBoxRef = useRef<HTMLDivElement | null>(null);
+  const [viewportDims, setViewportDims] = useState<{ width: number; height: number }>({ width: 0, height: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -188,6 +195,21 @@ export function ProgramMonitor({
       ? "aspect-square max-h-[440px]"
       : "aspect-video w-full";
 
+  // Monitor viewport resize observer
+  useEffect(() => {
+    if (!viewportBoxRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setViewportDims({
+          width: entry.contentRect.width,
+          height: entry.contentRect.height,
+        });
+      }
+    });
+    observer.observe(viewportBoxRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <div
       ref={containerRef}
@@ -258,6 +280,7 @@ export function ProgramMonitor({
       {/* 2. Monitor Display Surface */}
       <div className="flex-1 bg-[#05070a] flex items-center justify-center p-2 relative overflow-hidden">
         <div
+          ref={viewportBoxRef}
           className={`relative max-w-full max-h-full flex items-center justify-center shadow-2xl bg-black rounded overflow-hidden ${aspectClass}`}
         >
           <canvas
@@ -265,6 +288,18 @@ export function ProgramMonitor({
             className="w-full h-full object-contain cursor-pointer"
             onClick={onTogglePlay}
           />
+
+          {/* OpenCut Interactive Direct Transform Handles Overlay */}
+          {selectedClip && onUpdateClipTransform && viewportDims.width > 0 && (
+            <TransformHandles
+              clip={selectedClip}
+              canvasWidth={1920}
+              canvasHeight={1080}
+              containerWidth={viewportDims.width}
+              containerHeight={viewportDims.height}
+              onUpdateTransform={onUpdateClipTransform}
+            />
+          )}
         </div>
       </div>
 
