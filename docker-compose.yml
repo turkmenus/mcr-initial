@@ -12,7 +12,7 @@ services:
     container_name: mcr-web
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     environment:
       - PORT=3000
       - NODE_ENV=production
@@ -36,8 +36,10 @@ services:
     container_name: mcr-realtime
     restart: unless-stopped
     ports:
-      - "4001:4001"
-      - "5250:5250" # AMCP Port (Built-in Server or Gateway)
+      - "${REALTIME_PORT:-4001}:4001"
+    expose:
+      - "4001"
+      - "5250"
     environment:
       - PORT=4001
       - NODE_ENV=production
@@ -63,8 +65,8 @@ services:
       target: renderer
     container_name: mcr-renderer
     restart: unless-stopped
-    ports:
-      - "4002:4002"
+    expose:
+      - "4002"
     environment:
       - PORT=4002
       - NODE_ENV=production
@@ -82,7 +84,7 @@ services:
       - mcr-net
 
   # ==========================================
-  # 4. PostgreSQL Database
+  # 4. PostgreSQL Database (Internal Only)
   # ==========================================
   postgres:
     image: postgres:16-alpine
@@ -92,22 +94,22 @@ services:
       POSTGRES_USER: mcr_user
       POSTGRES_PASSWORD: mcr_secure_password
       POSTGRES_DB: mcr_db
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - mcr-net
 
   # ==========================================
-  # 5. Redis Queue Cache
+  # 5. Redis Queue Cache (Internal Only)
   # ==========================================
   redis:
     image: redis:7-alpine
     container_name: mcr-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis_data:/data
     networks:
