@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
+  <title>Weather Card</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .weather-card {
+      position: absolute;
+      right: 140px;
+      bottom: 120px;
+      width: 440px;
+      background: rgba(15, 23, 42, 0.94);
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(20px);
+      padding: 24px 28px;
+      color: #FFFFFF;
+      opacity: 0;
+      transform: translateX(40px);
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 14px;
+    }
+    .city-name {
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #38BDF8;
+    }
+    .badge {
+      background: #0284C7;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+    .main-temp-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 18px 0;
+    }
+    .temp-val {
+      font-size: 58px;
+      font-weight: 900;
+      line-height: 1;
+      color: #F8FAFC;
+    }
+    .condition-text {
+      font-size: 20px;
+      font-weight: 600;
+      color: #94A3B8;
+      text-align: right;
+    }
+    .details-row {
+      display: flex;
+      justify-content: space-between;
+      background: rgba(30, 41, 59, 0.6);
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      color: #CBD5E1;
+    }
+  </style>
+</head>
+<body>
+  <div id="card" class="weather-card">
+    <div class="card-header">
+      <span id="city" class="city-name">AŞKABAT</span>
+      <span class="badge">CANLI METEOROLOJİ</span>
+    </div>
+    <div class="main-temp-row">
+      <span id="temp" class="temp-val">32°C</span>
+      <span id="condition" class="condition-text">Güneşli ve Açık</span>
+    </div>
+    <div class="details-row">
+      <span>💧 Nem: <b id="humidity">%28</b></span>
+      <span>💨 Rüzgar: <b id="wind">14 km/s KB</b></span>
+    </div>
+  </div>
+
+  <script>
+    var card = document.getElementById("card");
+    var cityEl = document.getElementById("city");
+    var tempEl = document.getElementById("temp");
+    var conditionEl = document.getElementById("condition");
+    var humidityEl = document.getElementById("humidity");
+    var windEl = document.getElementById("wind");
+
+    window.play = function() {
+      gsap.to(card, { opacity: 1, x: 0, duration: 0.5, ease: "back.out(1.2)" });
+    };
+
+    window.stop = function() {
+      gsap.to(card, { opacity: 0, x: 40, duration: 0.4, ease: "power2.in" });
+    };
+
+    window.update = function(data) {
+      if (typeof data === "string") {
+        try { data = JSON.parse(data); } catch(e) {}
+      }
+      if (!data) return;
+      if (data.city !== undefined) cityEl.innerText = data.city;
+      if (data.temp !== undefined) tempEl.innerText = data.temp;
+      if (data.condition !== undefined) conditionEl.innerText = data.condition;
+      if (data.humidity !== undefined) humidityEl.innerText = data.humidity;
+      if (data.wind !== undefined) windEl.innerText = data.wind;
+    };
+
+    window.next = function() { window.stop(); };
+
+    window.addEventListener("message", function(event) {
+      if (!event.data || typeof event.data !== "object") return;
+      if (event.data.type === "PLAY") window.play();
+      if (event.data.type === "STOP") window.stop();
+      if (event.data.type === "NEXT") window.next();
+      if (event.data.type === "UPDATE") window.update(event.data.data);
+    });
+
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "TEMPLATE_MOUNTED" }, "*");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
+  <title>Ticker Headline</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .ticker-bar {
+      position: absolute;
+      left: 0;
+      bottom: 0;
+      width: 1920px;
+      height: 56px;
+      background: rgba(15, 23, 42, 0.96);
+      display: flex;
+      align-items: center;
+      box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.5);
+      border-top: 2px solid rgba(255, 255, 255, 0.1);
+      transform: translateY(60px);
+      opacity: 0;
+    }
+    .ticker-badge {
+      height: 100%;
+      background: #DC2626;
+      color: #FFFFFF;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      padding: 0 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      box-shadow: 4px 0 15px rgba(0, 0, 0, 0.4);
+      flex-shrink: 0;
+    }
+    .ticker-clock {
+      height: 100%;
+      background: rgba(30, 41, 59, 0.9);
+      color: #E2E8F0;
+      font-size: 18px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      border-right: 1px solid rgba(255, 255, 255, 0.1);
+      flex-shrink: 0;
+    }
+    .marquee-container {
+      flex: 1;
+      height: 100%;
+      overflow: hidden;
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .marquee-content {
+      display: inline-flex;
+      white-space: nowrap;
+      position: absolute;
+      left: 0;
+      color: #F8FAFC;
+      font-size: 22px;
+      font-weight: 600;
+      align-items: center;
+    }
+    .ticker-item {
+      display: inline-flex;
+      align-items: center;
+      margin-right: 40px;
+    }
+    .ticker-item::after {
+      content: "•";
+      color: #EF4444;
+      margin-left: 40px;
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <div id="tickerBar" class="ticker-bar">
+    <div id="tickerBadge" class="ticker-badge">SON DAKİKA</div>
+    <div id="tickerClock" class="ticker-clock">12:00:00</div>
+    <div class="marquee-container" id="marqueeContainer">
+      <div id="marqueeContent" class="marquee-content"></div>
+    </div>
+  </div>
+
+  <script>
+    var tickerBar = document.getElementById("tickerBar");
+    var tickerBadge = document.getElementById("tickerBadge");
+    var tickerClock = document.getElementById("tickerClock");
+    var marqueeContent = document.getElementById("marqueeContent");
+    var marqueeContainer = document.getElementById("marqueeContainer");
+
+    var currentItems = [
+      "MCR Yayın Otomasyon Sistemi test yayınına başladı.",
+      "Hazar Denizi kıyısında yeni enerji ve lojistik koridoru anlaşması imzalandı.",
+      "Meteoroloji: Aşkabat ve çevresinde hafta boyunca mevsim normalleri bekleniyor."
+    ];
+    var speed = 120;
+    var marqueeTween = null;
+
+    function updateClock() {
+      var now = new Date();
+      var h = String(now.getHours()).padStart(2, "0");
+      var m = String(now.getMinutes()).padStart(2, "0");
+      var s = String(now.getSeconds()).padStart(2, "0");
+      tickerClock.innerText = h + ":" + m + ":" + s;
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    function renderItems() {
+      var html = "";
+      currentItems.forEach(function(item) {
+        html += '<span class="ticker-item">' + item + '</span>';
+      });
+      marqueeContent.innerHTML = html;
+      startMarquee();
+    }
+
+    function startMarquee() {
+      if (marqueeTween) marqueeTween.kill();
+      var contentWidth = marqueeContent.offsetWidth || 1920;
+      var containerWidth = marqueeContainer.offsetWidth || 1600;
+      var distance = contentWidth + containerWidth;
+      var duration = distance / speed;
+
+      gsap.set(marqueeContent, { x: containerWidth });
+      marqueeTween = gsap.to(marqueeContent, {
+        x: -contentWidth,
+        duration: duration,
+        ease: "none",
+        repeat: -1
+      });
+    }
+
+    window.play = function() {
+      renderItems();
+      gsap.to(tickerBar, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" });
+    };
+
+    window.stop = function() {
+      gsap.to(tickerBar, {
+        y: 60,
+        opacity: 0,
+        duration: 0.4,
+        ease: "power2.in",
+        onComplete: function() {
+          if (marqueeTween) marqueeTween.kill();
+        }
+      });
+    };
+
+    window.update = function(data) {
+      if (typeof data === "string") {
+        try { data = JSON.parse(data); } catch(e) {}
+      }
+      if (!data) return;
+      if (data.category) tickerBadge.innerText = data.category;
+      if (data.accent) tickerBadge.style.backgroundColor = data.accent;
+      if (data.speed) speed = data.speed;
+      if (data.items && Array.isArray(data.items)) {
+        currentItems = data.items;
+        renderItems();
+      }
+    };
+
+    window.next = function() { window.stop(); };
+
+    window.addEventListener("message", function(event) {
+      if (!event.data || typeof event.data !== "object") return;
+      if (event.data.type === "PLAY") window.play();
+      if (event.data.type === "STOP") window.stop();
+      if (event.data.type === "NEXT") window.next();
+      if (event.data.type === "UPDATE") window.update(event.data.data);
+    });
+
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "TEMPLATE_MOUNTED" }, "*");
+    }
+  </script>
+</body>
+</html>

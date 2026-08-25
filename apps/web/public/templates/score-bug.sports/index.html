@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
+  <title>Sports Score Bug</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .bug-container {
+      position: absolute;
+      left: 140px;
+      top: 90px;
+      display: flex;
+      align-items: center;
+      background: rgba(15, 23, 42, 0.96);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.1);
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(-30px);
+    }
+    .team-box {
+      display: flex;
+      align-items: center;
+      padding: 10px 18px;
+      gap: 12px;
+    }
+    .team-box.a {
+      border-right: 1px solid rgba(255,255,255,0.1);
+    }
+    .team-name {
+      color: #FFFFFF;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 1px;
+    }
+    .team-score {
+      background: #0284C7;
+      color: #FFFFFF;
+      font-size: 22px;
+      font-weight: 900;
+      padding: 4px 12px;
+      border-radius: 4px;
+      min-width: 36px;
+      text-align: center;
+    }
+    .team-box.b .team-score {
+      background: #E11D48;
+    }
+    .time-box {
+      background: #1E293B;
+      padding: 12px 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-left: 1px solid rgba(255,255,255,0.1);
+    }
+    .match-time {
+      color: #38BDF8;
+      font-size: 20px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+    .match-period {
+      color: #94A3B8;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+  </style>
+</head>
+<body>
+  <div id="bug" class="bug-container">
+    <div class="team-box a">
+      <span id="teamA" class="team-name">AHL</span>
+      <span id="scoreA" class="team-score">2</span>
+    </div>
+    <div class="team-box b">
+      <span id="teamB" class="team-name">KOP</span>
+      <span id="scoreB" class="team-score">1</span>
+    </div>
+    <div class="time-box">
+      <span id="matchTime" class="match-time">74:20</span>
+      <span id="matchPeriod" class="match-period">2. DEVRE</span>
+    </div>
+  </div>
+
+  <script>
+    var bug = document.getElementById("bug");
+    var teamA = document.getElementById("teamA");
+    var scoreA = document.getElementById("scoreA");
+    var teamB = document.getElementById("teamB");
+    var scoreB = document.getElementById("scoreB");
+    var matchTime = document.getElementById("matchTime");
+    var matchPeriod = document.getElementById("matchPeriod");
+
+    window.play = function() {
+      gsap.to(bug, { opacity: 1, y: 0, duration: 0.5, ease: "back.out(1.4)" });
+    };
+
+    window.stop = function() {
+      gsap.to(bug, { opacity: 0, y: -30, duration: 0.4, ease: "power2.in" });
+    };
+
+    window.update = function(data) {
+      if (typeof data === "string") {
+        try { data = JSON.parse(data); } catch(e) {}
+      }
+      if (!data) return;
+      if (data.teamA !== undefined) teamA.innerText = data.teamA;
+      if (data.scoreA !== undefined) scoreA.innerText = data.scoreA;
+      if (data.teamB !== undefined) teamB.innerText = data.teamB;
+      if (data.scoreB !== undefined) scoreB.innerText = data.scoreB;
+      if (data.matchTime !== undefined) matchTime.innerText = data.matchTime;
+      if (data.period !== undefined) matchPeriod.innerText = data.period;
+    };
+
+    window.next = function() { window.stop(); };
+
+    window.addEventListener("message", function(event) {
+      if (!event.data || typeof event.data !== "object") return;
+      if (event.data.type === "PLAY") window.play();
+      if (event.data.type === "STOP") window.stop();
+      if (event.data.type === "NEXT") window.next();
+      if (event.data.type === "UPDATE") window.update(event.data.data);
+    });
+
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "TEMPLATE_MOUNTED" }, "*");
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+{
+  "$schema": "ograf/graphics-definition@1",
+  "id": "score-bug.sports",
+  "version": "1.0.0",
+  "name": "Spor Skor Tablosu (Score Bug)",
+  "category": "score-bug",
+  "render": {
+    "type": "html",
+    "entry": "index.html",
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "responsive": true,
+    "fps": 50
+  },
+  "data": {
+    "fields": {
+      "teamA": {
+        "type": "string",
+        "label": "Ev Sahibi",
+        "default": "AHL"
+      },
+      "scoreA": {
+        "type": "number",
+        "label": "Ev Sahibi Skor",
+        "default": 2
+      },
+      "teamB": {
+        "type": "string",
+        "label": "Deplasman",
+        "default": "KOP"
+      },
+      "scoreB": {
+        "type": "number",
+        "label": "Deplasman Skor",
+        "default": 1
+      },
+      "matchTime": {
+        "type": "string",
+        "label": "Maç Süresi",
+        "default": "74:20"
+      },
+      "period": {
+        "type": "string",
+        "label": "Devre / Periyot",
+        "default": "2. DEVRE"
+      }
+    }
+  },
+  "states": {
+    "in": {
+      "duration": 0.5
+    },
+    "out": {
+      "duration": 0.4
+    }
+  },
+  "x-mcr": {
+    "playout": {
+      "casparcg": {
+        "channel": 1,
+        "layer": 20,
+        "cgLayer": 15
+      },
+      "web": {
+        "route": "/output",
+        "zIndex": 25
+      }
+    },
+    "editor": {
+      "defaultDuration": 8,
+      "trackType": "graphics",
+      "resizable": true
+    }
+  }
+}

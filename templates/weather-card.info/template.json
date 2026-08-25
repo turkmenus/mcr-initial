@@ -1,0 +1,72 @@
+{
+  "$schema": "ograf/graphics-definition@1",
+  "id": "weather-card.info",
+  "version": "1.0.0",
+  "name": "Hava Durumu Kartı (Weather Card)",
+  "category": "weather-card",
+  "render": {
+    "type": "html",
+    "entry": "index.html",
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "responsive": true,
+    "fps": 50
+  },
+  "data": {
+    "fields": {
+      "city": {
+        "type": "string",
+        "label": "Şehir İsmi",
+        "default": "AŞKABAT"
+      },
+      "temp": {
+        "type": "string",
+        "label": "Sıcaklık",
+        "default": "32°C"
+      },
+      "condition": {
+        "type": "string",
+        "label": "Hava Durumu",
+        "default": "Güneşli ve Açık"
+      },
+      "humidity": {
+        "type": "string",
+        "label": "Nem",
+        "default": "%28"
+      },
+      "wind": {
+        "type": "string",
+        "label": "Rüzgar Hızı",
+        "default": "14 km/s KB"
+      }
+    }
+  },
+  "states": {
+    "in": {
+      "duration": 0.5
+    },
+    "out": {
+      "duration": 0.4
+    }
+  },
+  "x-mcr": {
+    "playout": {
+      "casparcg": {
+        "channel": 1,
+        "layer": 20,
+        "cgLayer": 12
+      },
+      "web": {
+        "route": "/output",
+        "zIndex": 22
+      }
+    },
+    "editor": {
+      "defaultDuration": 6,
+      "trackType": "graphics",
+      "resizable": true
+    }
+  }
+}

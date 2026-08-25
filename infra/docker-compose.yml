@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: mcr-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mcr_user
+      POSTGRES_PASSWORD: mcr_secure_password
+      POSTGRES_DB: mcr_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: mcr-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # CasparCG Server 2.4 (HTML producer + NDI consumer)
+  casparcg:
+    image: casparcg/server:latest
+    container_name: mcr-casparcg
+    restart: unless-stopped
+    network_mode: "host" # Required for low-latency NDI discovery on local network
+    volumes:
+      - ./casparcg.config:/casparcg/casparcg.config
+      - ../templates:/casparcg/template
+
+volumes:
+  postgres_data:
+  redis_data:

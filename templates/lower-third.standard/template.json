@@ -1,0 +1,75 @@
+{
+  "$schema": "ograf/graphics-definition@1",
+  "id": "lower-third.standard",
+  "version": "1.0.0",
+  "name": "Standart Alt Bant (Lower-Third)",
+  "category": "lower-third",
+  "render": {
+    "type": "html",
+    "entry": "index.html",
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "responsive": true,
+    "fps": 50
+  },
+  "data": {
+    "fields": {
+      "title": {
+        "type": "string",
+        "label": "İsim / Başlık",
+        "default": "Ahmet Yılmaz",
+        "maxLength": 48
+      },
+      "subtitle": {
+        "type": "string",
+        "label": "Ünvan / Açıklama",
+        "default": "Haber Spikeri • Canlı Yayın",
+        "maxLength": 64
+      },
+      "category": {
+        "type": "string",
+        "label": "Kategori Rozeti",
+        "default": "HABER ÖZEL"
+      },
+      "accent": {
+        "type": "color",
+        "label": "Vurgu Rengi",
+        "default": "#C8102E"
+      }
+    }
+  },
+  "states": {
+    "in": {
+      "duration": 0.6
+    },
+    "out": {
+      "duration": 0.4
+    },
+    "next": {
+      "duration": 0.3
+    },
+    "update": {
+      "duration": 0.3
+    }
+  },
+  "x-mcr": {
+    "playout": {
+      "casparcg": {
+        "channel": 1,
+        "layer": 20,
+        "cgLayer": 10
+      },
+      "web": {
+        "route": "/output",
+        "zIndex": 20
+      }
+    },
+    "editor": {
+      "defaultDuration": 5,
+      "trackType": "graphics",
+      "resizable": true
+    }
+  }
+}

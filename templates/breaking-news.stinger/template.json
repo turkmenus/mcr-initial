@@ -1,0 +1,62 @@
+{
+  "$schema": "ograf/graphics-definition@1",
+  "id": "breaking-news.stinger",
+  "version": "1.0.0",
+  "name": "Son Dakika Stinger (Fullscreen Transition)",
+  "category": "stinger",
+  "render": {
+    "type": "html",
+    "entry": "index.html",
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "responsive": true,
+    "fps": 50
+  },
+  "data": {
+    "fields": {
+      "title": {
+        "type": "string",
+        "label": "Ana Başlık",
+        "default": "SON DAKİKA GELİŞMESİ"
+      },
+      "subtitle": {
+        "type": "string",
+        "label": "Alt Bilgi",
+        "default": "MCR HABER MERKEZİ BİLDİRİYOR"
+      },
+      "accent": {
+        "type": "color",
+        "label": "Ana Renk",
+        "default": "#EF4444"
+      }
+    }
+  },
+  "states": {
+    "in": {
+      "duration": 0.8
+    },
+    "out": {
+      "duration": 0.5
+    }
+  },
+  "x-mcr": {
+    "playout": {
+      "casparcg": {
+        "channel": 1,
+        "layer": 30,
+        "cgLayer": 5
+      },
+      "web": {
+        "route": "/output",
+        "zIndex": 99
+      }
+    },
+    "editor": {
+      "defaultDuration": 3.5,
+      "trackType": "stinger",
+      "resizable": false
+    }
+  }
+}

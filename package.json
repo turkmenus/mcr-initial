@@ -1,0 +1,21 @@
+{
+  "name": "mcr-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./apps/*\" dev",
+    "dev:web": "pnpm --filter @mcr/web dev",
+    "dev:realtime": "pnpm --filter @mcr/realtime dev",
+    "dev:renderer": "pnpm --filter @mcr/renderer dev",
+    "build": "pnpm --recursive build",
+    "test": "pnpm --recursive test",
+    "lint": "pnpm --recursive lint"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  },
+  "packageManager": "pnpm@11.23.0"
+}

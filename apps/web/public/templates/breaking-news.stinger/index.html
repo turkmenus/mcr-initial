@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
+  <title>Breaking News Stinger</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .stinger-container {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+      perspective: 1200px;
+    }
+    .slash-bg {
+      position: absolute;
+      width: 2600px;
+      height: 1400px;
+      background: linear-gradient(135deg, #DC2626 0%, #991B1B 50%, #450A0A 100%);
+      transform: skewX(-20deg) translateX(-120%);
+      box-shadow: 0 0 80px rgba(220, 38, 38, 0.6);
+      z-index: 1;
+    }
+    .slash-overlay {
+      position: absolute;
+      width: 2600px;
+      height: 1400px;
+      background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+      transform: skewX(-20deg) translateX(-130%);
+      z-index: 2;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.8);
+    }
+    .center-card {
+      position: relative;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    .stinger-badge {
+      background: #EF4444;
+      color: #FFFFFF;
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      padding: 12px 40px;
+      border-radius: 6px;
+      box-shadow: 0 0 30px rgba(239, 68, 68, 0.8);
+      margin-bottom: 20px;
+    }
+    .stinger-title {
+      color: #FFFFFF;
+      font-size: 64px;
+      font-weight: 900;
+      letter-spacing: -1px;
+      text-transform: uppercase;
+      text-shadow: 0 10px 25px rgba(0,0,0,0.8);
+    }
+    .stinger-sub {
+      color: #CBD5E1;
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 4px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="stinger-container">
+    <div id="slashBg" class="slash-bg"></div>
+    <div id="slashOverlay" class="slash-overlay"></div>
+    <div id="centerCard" class="center-card">
+      <div id="badge" class="stinger-badge">FLAŞ GELİŞME</div>
+      <div id="title" class="stinger-title">SON DAKİKA GELİŞMESİ</div>
+      <div id="subtitle" class="stinger-sub">MCR HABER MERKEZİ BİLDİRİYOR</div>
+    </div>
+  </div>
+
+  <script>
+    var slashBg = document.getElementById("slashBg");
+    var slashOverlay = document.getElementById("slashOverlay");
+    var centerCard = document.getElementById("centerCard");
+    var titleEl = document.getElementById("title");
+    var subtitleEl = document.getElementById("subtitle");
+
+    var mainTl = gsap.timeline({ paused: true });
+
+    function buildTimeline() {
+      mainTl.clear();
+      mainTl
+        .set([slashBg, slashOverlay], { xPercent: -120 })
+        .set(centerCard, { opacity: 0, scale: 0.8 })
+        .to(slashBg, { xPercent: 0, duration: 0.5, ease: "power4.out" })
+        .to(slashOverlay, { xPercent: 0, duration: 0.5, ease: "power4.out" }, "-=0.35")
+        .to(centerCard, { opacity: 1, scale: 1, duration: 0.4, ease: "back.out(1.5)" }, "-=0.2")
+        .to(centerCard, { scale: 1.05, duration: 2, ease: "none" });
+    }
+
+    window.play = function() {
+      buildTimeline();
+      mainTl.play();
+    };
+
+    window.stop = function() {
+      gsap.timeline()
+        .to(centerCard, { opacity: 0, scale: 0.9, duration: 0.3, ease: "power2.in" })
+        .to(slashOverlay, { xPercent: 120, duration: 0.4, ease: "power3.in" }, "-=0.15")
+        .to(slashBg, { xPercent: 120, duration: 0.45, ease: "power3.in" }, "-=0.35");
+    };
+
+    window.update = function(data) {
+      if (typeof data === "string") {
+        try { data = JSON.parse(data); } catch(e) {}
+      }
+      if (!data) return;
+      if (data.title) titleEl.innerText = data.title;
+      if (data.subtitle) subtitleEl.innerText = data.subtitle;
+    };
+
+    window.next = function() { window.stop(); };
+
+    window.addEventListener("message", function(event) {
+      if (!event.data || typeof event.data !== "object") return;
+      if (event.data.type === "PLAY") window.play();
+      if (event.data.type === "STOP") window.stop();
+      if (event.data.type === "NEXT") window.next();
+      if (event.data.type === "UPDATE") window.update(event.data.data);
+    });
+
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "TEMPLATE_MOUNTED" }, "*");
+    }
+  </script>
+</body>
+</html>

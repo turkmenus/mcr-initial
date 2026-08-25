@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Finance Market Ticker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      width: 1920px; height: 1080px; overflow: hidden; background: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #ticker-bar {
+      position: absolute; left: 0; bottom: 0; width: 1920px; height: 56px;
+      background: rgba(10, 15, 29, 0.96); border-top: 2px solid #0284C7;
+      display: flex; align-items: center; opacity: 0; transform: translateY(56px);
+      box-shadow: 0 -8px 25px rgba(0,0,0,0.5);
+    }
+    .badge-pill {
+      background: #0284C7; color: #fff; font-weight: 900; font-size: 16px;
+      height: 100%; display: flex; align-items: center; padding: 0 24px;
+      letter-spacing: 1px; flex-shrink: 0;
+    }
+    .marquee-track {
+      flex: 1; overflow: hidden; display: flex; align-items: center; height: 100%;
+    }
+    .marquee-content {
+      display: flex; align-items: center; gap: 40px; white-space: nowrap;
+      font-family: monospace; font-size: 18px; font-weight: 700; color: #FFFFFF;
+      padding-left: 20px;
+    }
+    .item { display: flex; align-items: center; gap: 8px; }
+    .up { color: #10B981; }
+    .down { color: #EF4444; }
+  </style>
+</head>
+<body>
+  <div id="ticker-bar">
+    <div class="badge-pill">PİYASALAR</div>
+    <div class="marquee-track">
+      <div id="marquee" class="marquee-content">
+        <div class="item"><span>USD/TMT:</span> <span id="usd">3.50</span> <span id="usdChg" class="up">+0.12%</span></div>
+        <div class="item"><span>EUR/TMT:</span> <span id="eur">3.80</span> <span id="eurChg" class="down">-0.05%</span></div>
+        <div class="item"><span>ONS ALTIN:</span> <span id="gold">2,450$</span> <span id="goldChg" class="up">+1.20%</span></div>
+        <div class="item"><span>BRENT PETROL:</span> <span id="brent">82.40$</span> <span id="brentChg" class="up">+0.45%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function updateUI(data) {
+      if (!data) return;
+      if (data.usd) document.getElementById("usd").innerText = data.usd;
+      if (data.usdChange) {
+        const el = document.getElementById("usdChg");
+        el.innerText = data.usdChange;
+        el.className = data.usdChange.startsWith("+") ? "up" : "down";
+      }
+      if (data.eur) document.getElementById("eur").innerText = data.eur;
+      if (data.eurChange) {
+        const el = document.getElementById("eurChg");
+        el.innerText = data.eurChange;
+        el.className = data.eurChange.startsWith("+") ? "up" : "down";
+      }
+      if (data.gold) document.getElementById("gold").innerText = data.gold;
+      if (data.brent) document.getElementById("brent").innerText = data.brent;
+    }
+
+    function play() {
+      gsap.killTweensOf("#ticker-bar");
+      gsap.fromTo("#ticker-bar", { opacity: 0, y: 56 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" });
+    }
+
+    function stop() {
+      gsap.killTweensOf("#ticker-bar");
+      gsap.to("#ticker-bar", { opacity: 0, y: 56, duration: 0.4, ease: "power2.in" });
+    }
+
+    window.addEventListener("message", (e) => {
+      const msg = e.data;
+      if (!msg) return;
+      if (msg.type === "PLAY") { if (msg.data) updateUI(msg.data); play(); }
+      else if (msg.type === "STOP") { stop(); }
+      else if (msg.type === "UPDATE") { updateUI(msg.data); }
+    });
+
+    window.play = play;
+    window.stop = stop;
+    window.update = updateUI;
+  </script>
+</body>
+</html>

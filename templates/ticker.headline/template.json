@@ -1,0 +1,71 @@
+{
+  "$schema": "ograf/graphics-definition@1",
+  "id": "ticker.headline",
+  "version": "1.0.0",
+  "name": "Haber Bandı (Ticker Marquee)",
+  "category": "ticker",
+  "render": {
+    "type": "html",
+    "entry": "index.html",
+    "canvas": {
+      "width": 1920,
+      "height": 1080
+    },
+    "responsive": true,
+    "fps": 50
+  },
+  "data": {
+    "fields": {
+      "category": {
+        "type": "string",
+        "label": "Bant Başlığı",
+        "default": "SON DAKİKA"
+      },
+      "items": {
+        "type": "json",
+        "label": "Haber Başlıkları (Dizi)",
+        "default": [
+          "MCR Yayın Otomasyon Sistemi test yayınına başladı.",
+          "Hazar Denizi kıyısında yeni enerji ve lojistik koridoru anlaşması imzalandı.",
+          "Meteoroloji: Aşkabat ve çevresinde hafta boyunca mevsim normalleri bekleniyor."
+        ]
+      },
+      "speed": {
+        "type": "number",
+        "label": "Kayma Hızı (px/sn)",
+        "default": 120
+      },
+      "accent": {
+        "type": "color",
+        "label": "Rozet Rengi",
+        "default": "#DC2626"
+      }
+    }
+  },
+  "states": {
+    "in": {
+      "duration": 0.5
+    },
+    "out": {
+      "duration": 0.4
+    }
+  },
+  "x-mcr": {
+    "playout": {
+      "casparcg": {
+        "channel": 1,
+        "layer": 20,
+        "cgLayer": 20
+      },
+      "web": {
+        "route": "/output",
+        "zIndex": 15
+      }
+    },
+    "editor": {
+      "defaultDuration": 10,
+      "trackType": "ticker",
+      "resizable": true
+    }
+  }
+}

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
+  <title>Lower Third Standard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    body {
+      width: 1920px;
+      height: 1080px;
+      background: transparent;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .safe-zone {
+      position: absolute;
+      left: 140px;
+      bottom: 120px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      perspective: 1000px;
+    }
+    .badge {
+      background: #C8102E;
+      color: #FFFFFF;
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 18px;
+      border-radius: 4px 4px 0 0;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      transform-origin: bottom left;
+      opacity: 0;
+      transform: translateY(15px);
+    }
+    .main-box {
+      background: rgba(10, 15, 29, 0.95);
+      border-left: 6px solid #C8102E;
+      backdrop-filter: blur(16px);
+      padding: 16px 36px 18px 24px;
+      min-width: 540px;
+      max-width: 850px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1);
+      border-radius: 0 8px 8px 0;
+      opacity: 0;
+      transform: translateX(-40px);
+    }
+    .title {
+      color: #FFFFFF;
+      font-size: 38px;
+      font-weight: 800;
+      line-height: 1.15;
+      letter-spacing: -0.5px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    }
+    .subtitle {
+      color: #94A3B8;
+      font-size: 22px;
+      font-weight: 500;
+      margin-top: 4px;
+      line-height: 1.2;
+    }
+  </style>
+</head>
+<body>
+  <div class="safe-zone">
+    <div id="badge" class="badge">HABER ÖZEL</div>
+    <div id="mainBox" class="main-box">
+      <div id="title" class="title">Ahmet Yılmaz</div>
+      <div id="subtitle" class="subtitle">Haber Spikeri • Canlı Yayın</div>
+    </div>
+  </div>
+
+  <script>
+    var tl = gsap.timeline({ paused: true });
+    var badgeEl = document.getElementById("badge");
+    var mainBoxEl = document.getElementById("mainBox");
+    var titleEl = document.getElementById("title");
+    var subtitleEl = document.getElementById("subtitle");
+
+    function initAnimation() {
+      tl.clear();
+      tl.to(badgeEl, { opacity: 1, y: 0, duration: 0.4, ease: "power3.out" })
+        .to(mainBoxEl, { opacity: 1, x: 0, duration: 0.5, ease: "back.out(1.2)" }, "-=0.2");
+    }
+
+    window.play = function() {
+      initAnimation();
+      tl.play();
+    };
+
+    window.stop = function() {
+      gsap.to([badgeEl, mainBoxEl], {
+        opacity: 0,
+        x: -30,
+        duration: 0.35,
+        ease: "power2.in",
+        onComplete: function() {
+          badgeEl.style.transform = "translateY(15px)";
+          mainBoxEl.style.transform = "translateX(-40px)";
+        }
+      });
+    };
+
+    window.update = function(data) {
+      if (typeof data === "string") {
+        try { data = JSON.parse(data); } catch(e) {}
+      }
+      if (!data) return;
+
+      gsap.to([titleEl, subtitleEl], {
+        opacity: 0.2,
+        duration: 0.15,
+        onComplete: function() {
+          if (data.title !== undefined) titleEl.innerText = data.title;
+          if (data.subtitle !== undefined) subtitleEl.innerText = data.subtitle;
+          if (data.category !== undefined) badgeEl.innerText = data.category;
+          if (data.accent) {
+            badgeEl.style.backgroundColor = data.accent;
+            mainBoxEl.style.borderLeftColor = data.accent;
+          }
+          gsap.to([titleEl, subtitleEl], { opacity: 1, duration: 0.2 });
+        }
+      });
+    };
+
+    window.next = function() { window.stop(); };
+
+    window.addEventListener("message", function(event) {
+      if (!event.data || typeof event.data !== "object") return;
+      if (event.data.type === "PLAY") window.play();
+      if (event.data.type === "STOP") window.stop();
+      if (event.data.type === "NEXT") window.next();
+      if (event.data.type === "UPDATE") window.update(event.data.data);
+    });
+
+    if (window.parent && window.parent !== window) {
+      window.parent.postMessage({ type: "TEMPLATE_MOUNTED" }, "*");
+    }
+  </script>
+</body>
+</html>
