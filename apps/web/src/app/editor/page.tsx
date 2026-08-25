@@ -29,6 +29,7 @@ import {
   Maximize,
   SlidersHorizontal,
   ChevronDown,
+  Volume2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -188,7 +189,8 @@ export default function EditorPage() {
 
   // 2. Workspace Layout Modes
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("edit");
-  const [activeSideDrawer, setActiveSideDrawer] = useState<"media" | "inspector" | null>("media");
+  const [isMediaDrawerOpen, setIsMediaDrawerOpen] = useState(true);
+  const [isInspectorDrawerOpen, setIsInspectorDrawerOpen] = useState(true);
   const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
 
   // 3. History Stack
@@ -222,6 +224,14 @@ export default function EditorPage() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
   const [selectedClipId, setSelectedClipId] = useState<string | null>("clip_g1");
+
+  // Auto open inspector on clip selection
+  const handleSelectClip = (clipId: string | null) => {
+    setSelectedClipId(clipId);
+    if (clipId) {
+      setIsInspectorDrawerOpen(true);
+    }
+  };
 
   // Modals
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
@@ -366,7 +376,7 @@ export default function EditorPage() {
 
     const nextProject = addClipToTrack(project, targetTrack.id, newClip);
     pushStateToHistory(nextProject);
-    setSelectedClipId(newClip.id);
+    handleSelectClip(newClip.id);
   };
 
   const handleAddStockMedia = (item: SampleMediaItem) => {
@@ -402,7 +412,7 @@ export default function EditorPage() {
 
     const nextProject = addClipToTrack(project, targetTrack.id, newClip);
     pushStateToHistory(nextProject);
-    setSelectedClipId(newClip.id);
+    handleSelectClip(newClip.id);
   };
 
   const handleAddOGrafTemplate = (tmpl: any) => {
@@ -430,7 +440,7 @@ export default function EditorPage() {
 
     const nextProject = addClipToTrack(project, targetTrack.id, newClip);
     pushStateToHistory(nextProject);
-    setSelectedClipId(newClip.id);
+    handleSelectClip(newClip.id);
   };
 
   const handleAddTextPreset = (preset: any) => {
@@ -454,7 +464,7 @@ export default function EditorPage() {
 
     const nextProject = addClipToTrack(project, targetTrack.id, newClip);
     pushStateToHistory(nextProject);
-    setSelectedClipId(newClip.id);
+    handleSelectClip(newClip.id);
   };
 
   // Timeline Mutations
@@ -585,52 +595,52 @@ export default function EditorPage() {
   const selectedClip = project.tracks.flatMap((t) => t.clips).find((c) => c.id === selectedClipId) || null;
 
   return (
-    <div className="flex-1 flex flex-col h-screen w-screen bg-[#07090e] overflow-hidden select-none">
-      {/* 1. Ultra-Thin Integrated NLE Master Bar (34px) */}
-      <div className="h-9 px-2 bg-[#0d1017] border-b border-[#1e2538] flex items-center justify-between flex-shrink-0 z-30">
-        {/* Left: App Switcher Dropdown & Project Title */}
+    <div className="flex-1 flex flex-col h-screen w-screen bg-[#0e1117] text-slate-200 overflow-hidden select-none font-sans">
+      {/* 1. Neutral NLE Desktop Menu Bar (32px) */}
+      <div className="h-8 px-2 bg-[#141822] border-b border-[#222733] flex items-center justify-between flex-shrink-0 z-30">
+        {/* Left: App Switcher & Menus & Project Title */}
         <div className="flex items-center gap-2">
           {/* Module Switcher Dropdown */}
           <div className="relative">
             <button
               onClick={() => setIsAppMenuOpen(!isAppMenuOpen)}
-              className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#161c2b] hover:bg-[#1f283d] text-white font-black text-xs border border-[#263047] transition shadow-sm"
+              className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#1c2230] hover:bg-[#252d40] text-slate-200 font-bold text-xs border border-[#2a3449] transition"
             >
               <Tv className="w-3.5 h-3.5 text-sky-400" />
-              <span>MCR EDITÖR</span>
+              <span className="tracking-wide">MCR EDITÖR</span>
               <ChevronDown className="w-3 h-3 text-slate-400" />
             </button>
 
             {isAppMenuOpen && (
               <div
-                className="absolute left-0 top-8 w-48 bg-[#0e131d] border border-[#263047] rounded-lg shadow-2xl p-1.5 z-50 space-y-1"
+                className="absolute left-0 top-7 w-48 bg-[#141822] border border-[#2a3449] rounded shadow-2xl p-1 z-50 space-y-0.5"
                 onMouseLeave={() => setIsAppMenuOpen(false)}
               >
                 <Link
                   href="/control"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-300 hover:bg-[#1a2233] hover:text-white transition"
+                  className="flex items-center gap-2 px-2 py-1 rounded text-xs text-slate-300 hover:bg-[#1f2738] hover:text-white transition"
                 >
-                  <SlidersHorizontal className="w-3.5 h-3.5 text-red-400" />
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-rose-400" />
                   <span>Canlı Yayın Grafikleri</span>
                 </Link>
                 <Link
                   href="/ticker"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-300 hover:bg-[#1a2233] hover:text-white transition"
+                  className="flex items-center gap-2 px-2 py-1 rounded text-xs text-slate-300 hover:bg-[#1f2738] hover:text-white transition"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                   <span>Ticker Operatörü</span>
                 </Link>
                 <Link
                   href="/weather"
-                  className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-300 hover:bg-[#1a2233] hover:text-white transition"
+                  className="flex items-center gap-2 px-2 py-1 rounded text-xs text-slate-300 hover:bg-[#1f2738] hover:text-white transition"
                 >
-                  <Tv className="w-3.5 h-3.5 text-teal-400" />
+                  <Tv className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Meteoroloji Stüdyosu</span>
                 </Link>
-                <div className="h-px bg-[#1e2538] my-1" />
+                <div className="h-px bg-[#222733] my-1" />
                 <button
                   onClick={() => window.open("/output", "MCROutputWindow", "width=1920,height=1080")}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-sky-400 hover:bg-sky-950/40 transition text-left"
+                  className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-sky-400 hover:bg-sky-950/40 transition text-left"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
                   <span>Çıkış Penceresi (Output)</span>
@@ -639,19 +649,19 @@ export default function EditorPage() {
             )}
           </div>
 
-          <div className="h-4 w-px bg-[#1e2538]" />
+          <div className="h-3.5 w-px bg-[#222733]" />
 
           {/* Project Title Input */}
           <input
             value={project.name}
             onChange={(e) => setProject({ ...project, name: e.target.value })}
-            className="bg-transparent text-xs font-semibold text-slate-300 border-b border-transparent hover:border-[#1e2538] focus:border-sky-500 focus:outline-none px-1 py-0.5 max-w-[160px] truncate"
+            className="bg-transparent text-xs font-semibold text-slate-300 border-b border-transparent hover:border-[#2a3449] focus:border-sky-500 focus:outline-none px-1 py-0.5 max-w-[160px] truncate"
           />
 
           {/* SMPTE Timecode Counter */}
-          <div className="px-2 py-0.5 rounded bg-black/70 border border-[#1e2538] font-mono flex items-center gap-1.5">
+          <div className="px-2 py-0.5 rounded bg-black/60 border border-[#222733] font-mono flex items-center gap-1.5">
             <span className="text-[9px] text-slate-500 font-bold">TC</span>
-            <span className="text-xs font-black text-sky-400 tracking-wider">
+            <span className="text-xs font-bold text-sky-400 tracking-wider">
               {formatTimecode(currentTime, 50)}
             </span>
           </div>
@@ -661,54 +671,54 @@ export default function EditorPage() {
         <div className="flex items-center gap-1">
           <button
             onClick={() => setCurrentTime(0)}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1c2230] transition"
             title="En Başa Dön (Home)"
           >
             <SkipBack className="w-3 h-3" />
           </button>
           <button
             onClick={() => setCurrentTime((t) => Math.max(0, t - 1 / 50))}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1c2230] transition"
             title="1 Kare Geri (←)"
           >
             <ChevronLeft className="w-3 h-3" />
           </button>
           <button
             onClick={() => setIsPlaying(!isPlaying)}
-            className="px-3 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] flex items-center gap-1 shadow transition"
+            className="px-3 py-0.5 rounded bg-[#1f2738] hover:bg-[#283248] text-white font-bold text-[11px] flex items-center gap-1 border border-[#2c374d] transition"
           >
             {isPlaying ? (
-              <Pause className="w-3 h-3 fill-white" />
+              <Pause className="w-3 h-3 fill-white text-white" />
             ) : (
-              <Play className="w-3 h-3 fill-white ml-0.5" />
+              <Play className="w-3 h-3 fill-white text-white ml-0.5" />
             )}
             <span>{isPlaying ? "DUR" : "OYNAT"}</span>
           </button>
           <button
             onClick={() => setCurrentTime((t) => Math.min(project.duration ?? 60, t + 1 / 50))}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1c2230] transition"
             title="1 Kare İleri (→)"
           >
             <ChevronRight className="w-3 h-3" />
           </button>
           <button
             onClick={() => setCurrentTime(project.duration ?? 60)}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1c2230] transition"
             title="En Sona Git (End)"
           >
             <SkipForward className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Right: Workspace Layout Mode Switcher & Export */}
+        {/* Right: Workspace Layout Modes & Export */}
         <div className="flex items-center gap-2">
           {/* Workspace Layout Mode Tabs */}
-          <div className="flex items-center bg-[#07090e] p-0.5 rounded border border-[#1e2538]">
+          <div className="flex items-center bg-[#0e1117] p-0.5 rounded border border-[#222733]">
             <button
               onClick={() => setWorkspaceMode("edit")}
               className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
                 workspaceMode === "edit"
-                  ? "bg-[#1e2538] text-white"
+                  ? "bg-[#222733] text-white"
                   : "text-slate-400 hover:text-slate-200"
               }`}
               title="Klasik Kurgu Düzeni"
@@ -720,7 +730,7 @@ export default function EditorPage() {
               onClick={() => setWorkspaceMode("dual")}
               className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
                 workspaceMode === "dual"
-                  ? "bg-[#1e2538] text-white"
+                  ? "bg-[#222733] text-white"
                   : "text-slate-400 hover:text-slate-200"
               }`}
               title="İkili Monitör (Kaynak + Program)"
@@ -732,7 +742,7 @@ export default function EditorPage() {
               onClick={() => setWorkspaceMode("cinema")}
               className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
                 workspaceMode === "cinema"
-                  ? "bg-[#1e2538] text-white"
+                  ? "bg-[#222733] text-white"
                   : "text-slate-400 hover:text-slate-200"
               }`}
               title="Büyük Monitör / QC Önizleme"
@@ -744,7 +754,7 @@ export default function EditorPage() {
               onClick={() => setWorkspaceMode("audio")}
               className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
                 workspaceMode === "audio"
-                  ? "bg-[#1e2538] text-white"
+                  ? "bg-[#222733] text-white"
                   : "text-slate-400 hover:text-slate-200"
               }`}
               title="Ses Mikseri & VU Göstergeleri"
@@ -754,7 +764,7 @@ export default function EditorPage() {
             </button>
           </div>
 
-          <div className="h-4 w-px bg-[#1e2538]" />
+          <div className="h-3.5 w-px bg-[#222733]" />
 
           {/* Undo / Redo */}
           <div className="flex items-center gap-0.5">
@@ -778,76 +788,63 @@ export default function EditorPage() {
 
           <button
             onClick={() => setIsShortcutsModalOpen(true)}
-            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1c2230] transition"
             title="Klavye Kısayolları (?)"
           >
             <Keyboard className="w-3 h-3" />
           </button>
 
           {/* Export Button */}
-          <Button
-            size="sm"
+          <button
             onClick={() => setIsExportModalOpen(true)}
-            className="h-6 text-[11px] font-bold px-2.5 gap-1 bg-sky-600 hover:bg-sky-500 text-white shadow-sm"
+            className="h-6 text-[11px] font-bold px-2.5 rounded bg-[#1e40af] hover:bg-[#2563eb] text-white border border-[#3b82f6]/40 flex items-center gap-1 transition shadow-sm"
           >
             <Download className="w-3 h-3" />
             <span>EXPORT</span>
-          </Button>
+          </button>
         </div>
       </div>
 
-      {/* 2. Main Workstation Area */}
+      {/* 2. Seamless NLE Studio Split View */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Far-Left Vertical Activity Dock */}
-        <div className="w-10 bg-[#0a0d14] border-r border-[#1e2538] flex flex-col items-center py-2 gap-2 flex-shrink-0 z-20">
+        {/* Left Vertical Activity Bar (36px) */}
+        <div className="w-9 bg-[#11141c] border-r border-[#222733] flex flex-col items-center py-1.5 gap-1.5 flex-shrink-0 z-20">
           <button
-            onClick={() => setActiveSideDrawer(activeSideDrawer === "media" ? null : "media")}
-            className={`p-2 rounded-lg transition ${
-              activeSideDrawer === "media"
-                ? "bg-sky-600 text-white shadow-md"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#161c2b]"
+            onClick={() => setIsMediaDrawerOpen(!isMediaDrawerOpen)}
+            className={`p-1.5 rounded transition ${
+              isMediaDrawerOpen
+                ? "bg-[#222733] text-sky-400"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#181c26]"
             }`}
-            title="Medya & Varlık Kütüphanesi"
+            title={isMediaDrawerOpen ? "Medya Panelini Gizle" : "Medya Panelini Aç"}
           >
             <FolderOpen className="w-4 h-4" />
           </button>
 
           <button
-            onClick={() => setActiveSideDrawer(activeSideDrawer === "inspector" ? null : "inspector")}
-            className={`p-2 rounded-lg transition ${
-              activeSideDrawer === "inspector"
-                ? "bg-sky-600 text-white shadow-md"
-                : "text-slate-400 hover:text-slate-200 hover:bg-[#161c2b]"
+            onClick={() => setIsInspectorDrawerOpen(!isInspectorDrawerOpen)}
+            className={`p-1.5 rounded transition ${
+              isInspectorDrawerOpen
+                ? "bg-[#222733] text-sky-400"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#181c26]"
             }`}
-            title="Klip Özellikleri (Inspector)"
+            title={isInspectorDrawerOpen ? "Özellikler Panelini Gizle" : "Özellikler Panelini Aç"}
           >
             <Sliders className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Dynamic Center Workstation View (Split Grid by Workspace Mode) */}
+        {/* Dynamic Center Workstation View */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Top Half: Monitors & Side Drawers */}
           <div
-            className={`flex-1 grid gap-1.5 p-1.5 overflow-hidden transition-all ${
-              workspaceMode === "cinema"
-                ? "h-[70%]"
-                : "h-[54%]"
+            className={`flex-1 flex overflow-hidden transition-all border-b border-[#222733] ${
+              workspaceMode === "cinema" ? "h-[70%]" : "h-[54%]"
             }`}
-            style={{
-              gridTemplateColumns:
-                activeSideDrawer === "media" && workspaceMode === "edit"
-                  ? "280px 1fr 300px"
-                  : activeSideDrawer === "media"
-                  ? "280px 1fr"
-                  : activeSideDrawer === "inspector"
-                  ? "1fr 300px"
-                  : "1fr",
-            }}
           >
-            {/* Drawer 1: Media Library (if open) */}
-            {activeSideDrawer === "media" && (
-              <div className="h-full overflow-hidden">
+            {/* Drawer 1: Media Library Panel */}
+            {isMediaDrawerOpen && workspaceMode !== "cinema" && (
+              <div className="w-72 h-full border-r border-[#222733] overflow-hidden flex-shrink-0">
                 <MediaLibraryPanel
                   mediaAssets={mediaAssets}
                   isUploading={isUploading}
@@ -861,11 +858,11 @@ export default function EditorPage() {
               </div>
             )}
 
-            {/* Central Monitor Surface based on Layout Mode */}
-            <div className="h-full overflow-hidden flex gap-1.5">
+            {/* Central Monitor Surface */}
+            <div className="flex-1 h-full overflow-hidden flex">
               {/* Dual Monitor Mode: Left Source Preview */}
               {workspaceMode === "dual" && (
-                <div className="flex-1 h-full overflow-hidden">
+                <div className="flex-1 h-full border-r border-[#222733] overflow-hidden">
                   <SourceMonitor
                     clip={selectedClip}
                     onInsertToTimeline={() => selectedClip && handleAddAsset(selectedClip as any)}
@@ -890,7 +887,7 @@ export default function EditorPage() {
 
               {/* Audio Mixer Mode: Right Mixer Strips */}
               {workspaceMode === "audio" && (
-                <div className="flex-1 h-full overflow-hidden">
+                <div className="w-80 h-full border-l border-[#222733] overflow-hidden flex-shrink-0">
                   <AudioMixerPanel
                     project={project}
                     isPlaying={isPlaying}
@@ -900,9 +897,9 @@ export default function EditorPage() {
               )}
             </div>
 
-            {/* Drawer 2: Clip Inspector (if open and in Edit mode) */}
-            {(activeSideDrawer === "inspector" || (activeSideDrawer === "media" && workspaceMode === "edit")) && (
-              <div className="h-full overflow-hidden">
+            {/* Drawer 2: Clip Inspector Panel */}
+            {isInspectorDrawerOpen && workspaceMode !== "cinema" && (
+              <div className="w-72 h-full border-l border-[#222733] overflow-hidden flex-shrink-0">
                 <ClipInspector clip={selectedClip} onUpdateClip={handleUpdateClip} />
               </div>
             )}
@@ -910,7 +907,7 @@ export default function EditorPage() {
 
           {/* Bottom Half: Multi-Track Interactive Timeline */}
           <div
-            className={`p-1.5 pt-0 overflow-hidden flex flex-col transition-all ${
+            className={`overflow-hidden flex flex-col transition-all ${
               workspaceMode === "cinema" ? "h-[30%]" : "h-[46%]"
             }`}
           >
@@ -918,7 +915,7 @@ export default function EditorPage() {
               project={project}
               currentTime={currentTime}
               selectedClipId={selectedClipId}
-              onSelectClip={setSelectedClipId}
+              onSelectClip={handleSelectClip}
               onSeek={setCurrentTime}
               onMoveClip={handleMoveClip}
               onTrimClip={handleTrimClip}
