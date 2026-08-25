@@ -1,8 +1,8 @@
 import { spawn } from "child_process";
 import fs from "fs";
 import path from "path";
-import { TimelineProject, VideoClip, TextClip, GraphicsOverlayClip } from "@mcr/schema";
-import { getPreset, getPresetFfmpegArgs } from "@mcr/presets";
+import { TimelineProject, VideoClip, AudioClip, TextClip, GraphicsOverlayClip } from "@mcr/schema";
+import { getPreset, getPresetFfmpegArgs, ExportPreset } from "@mcr/presets";
 
 export interface RenderJobProgress {
   jobId: string;
@@ -15,7 +15,7 @@ export interface RenderJobProgress {
 let hasNvencCache: boolean | null = null;
 
 /**
- * Checks if NVIDIA NVENC hardware acceleration is available.
+ * Checks if NVIDIA NVENC hardware acceleration is actually functional by running a 1-frame test.
  */
 export async function isNvencAvailable(): Promise<boolean> {
   if (hasNvencCache !== null) return hasNvencCache;
@@ -24,40 +24,79 @@ export async function isNvencAvailable(): Promise<boolean> {
     return false;
   }
   return new Promise((resolve) => {
-    const checkProc = spawn("ffmpeg", ["-encoders"]);
-    let output = "";
-    checkProc.stdout.on("data", (data) => {
-      output += data.toString();
-    });
-    checkProc.on("close", (code) => {
-      hasNvencCache = code === 0 && output.includes("h264_nvenc");
+    const probe = spawn("ffmpeg", [
+      "-y",
+      "-f", "lavfi",
+      "-i", "nullsrc=s=64x64:d=0.04",
+      "-frames:v", "1",
+      "-c:v", "h264_nvenc",
+      "-f", "null",
+      "-",
+    ]);
+    probe.on("close", (code) => {
+      hasNvencCache = code === 0;
       if (hasNvencCache) {
-        console.log("⚡ [MCR Renderer] NVIDIA NVENC hardware acceleration is ENABLED.");
+        console.log("⚡ [MCR Renderer] NVIDIA NVENC hardware acceleration is verified and ENABLED.");
       } else {
-        console.log("ℹ️ [MCR Renderer] NVIDIA NVENC not detected. Using CPU encoding.");
+        console.log("ℹ️ [MCR Renderer] NVIDIA NVENC not available. Using high-performance CPU libx264.");
       }
       resolve(hasNvencCache);
     });
-    checkProc.on("error", () => {
+    probe.on("error", () => {
       hasNvencCache = false;
       resolve(false);
     });
   });
 }
 
-function resolveMediaFilePath(src: string): string | null {
-  if (!src) return null;
+/**
+ * Safely resolves a clip file path against root, renderer dir, uploads, or public/media.
+ */
+export function resolveMediaFilePath(src: string): string | null {
+  if (!src || src.startsWith("blob:") || src.startsWith("synthetic://")) return null;
+  const cleanPath = src.replace(/^\//, "");
+  const base = path.basename(cleanPath);
+
   const candidates = [
-    path.resolve(process.cwd(), src.replace(/^\//, "")),
-    path.resolve(process.cwd(), "uploads", path.basename(src)),
-    path.resolve(process.cwd(), "apps/web/public", src.replace(/^\//, "")),
+    // Current working directory relative
+    path.resolve(process.cwd(), cleanPath),
+    path.resolve(process.cwd(), "uploads", base),
+    path.resolve(process.cwd(), "apps/web/public", cleanPath),
+    path.resolve(process.cwd(), "apps/web/public/media", base),
+    path.resolve(process.cwd(), "media", base),
+
+    // Monorepo root relative (if running from apps/renderer)
+    path.resolve(process.cwd(), "../..", cleanPath),
+    path.resolve(process.cwd(), "../../uploads", base),
+    path.resolve(process.cwd(), "../../apps/web/public", cleanPath),
+    path.resolve(process.cwd(), "../../apps/web/public/media", base),
+    path.resolve(process.cwd(), "../../media", base),
   ];
+
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
   }
   return null;
 }
 
+/**
+ * Safely escapes strings for FFmpeg drawtext filter parameters.
+ */
+function escapeDrawText(text: string): string {
+  if (!text) return "";
+  return text
+    .replace(/\\/g, "\\\\\\\\")
+    .replace(/'/g, "\\\\'")
+    .replace(/:/g, "\\\\:")
+    .replace(/,/g, "\\\\,")
+    .replace(/%/g, "%%")
+    .replace(/\[/g, "\\[")
+    .replace(/\]/g, "\\]");
+}
+
+/**
+ * Main timeline render pipeline.
+ */
 export async function renderTimelineToVideo(
   project: TimelineProject,
   presetId = "broadcast-16:9",
@@ -70,138 +109,192 @@ export async function renderTimelineToVideo(
   const preset = getPreset(presetId) || getPreset("broadcast-16:9")!;
   const outputFileName = `master_${project.id.replace(/[^a-zA-Z0-9_-]/g, "_")}_${Date.now()}.${preset.container}`;
   const outputPath = path.resolve(outputDir, outputFileName);
-  const isGpu = await isNvencAvailable();
-  const targetEncoderArgs = getPresetFfmpegArgs(preset, isGpu);
+
   const totalDuration = Math.max(1, project.duration || 10);
+  const isGpu = await isNvencAvailable();
 
-  const videoClips = project.tracks.filter((t) => t.type === "video").flatMap((t) => t.clips) as VideoClip[];
-  const textClips = project.tracks.filter((t) => t.type === "text").flatMap((t) => t.clips) as TextClip[];
-  const graphicsClips = project.tracks.filter((t) => t.type === "graphics").flatMap((t) => t.clips) as GraphicsOverlayClip[];
+  // Try GPU first if available, with graceful CPU fallback on any exit failure
+  try {
+    return await executeFfmpegRender(project, preset, outputPath, totalDuration, isGpu);
+  } catch (err: any) {
+    if (isGpu) {
+      console.warn(`[MCR Renderer] GPU render failed (${err.message}). Retrying with CPU libx264 fallback...`);
+      return await executeFfmpegRender(project, preset, outputPath, totalDuration, false);
+    }
+    throw err;
+  }
+}
 
-  // Find any real video files on disk
-  const realFileClips = videoClips
-    .map((c) => ({ clip: c, resolvedPath: resolveMediaFilePath(c.src) }))
-    .filter((x): x is { clip: VideoClip; resolvedPath: string } => x.resolvedPath !== null);
+/**
+ * Generates and runs FFmpeg composite graph for the timeline.
+ */
+async function executeFfmpegRender(
+  project: TimelineProject,
+  preset: ExportPreset,
+  outputPath: string,
+  totalDuration: number,
+  useGpu: boolean
+): Promise<{ outputPath: string }> {
+  const encoderArgs = getPresetFfmpegArgs(preset, useGpu);
+
+  // Extract all tracks and clips
+  const allTracks = project.tracks || [];
+  const videoClips = allTracks.filter((t) => t.type === "video" && t.visible !== false).flatMap((t) => t.clips) as VideoClip[];
+  const audioClips = allTracks.filter((t) => t.type === "audio" && t.muted !== true).flatMap((t) => t.clips) as AudioClip[];
+  const textClips = allTracks.filter((t) => t.type === "text" && t.visible !== false).flatMap((t) => t.clips) as TextClip[];
+  const graphicsClips = allTracks.filter((t) => t.type === "graphics" && t.visible !== false).flatMap((t) => t.clips) as GraphicsOverlayClip[];
+
+  const inputs: string[] = [];
+  const filterChains: string[] = [];
+  let currentInputIndex = 0;
+
+  function registerInput(...args: string[]): number {
+    inputs.push(...args);
+    const idx = currentInputIndex;
+    currentInputIndex += 1;
+    return idx;
+  }
+
+  // Base Canvas Background (Base Input #0)
+  const bgInputIdx = registerInput("-f", "lavfi", "-i", `color=c=0x0a0d14:s=${preset.width}x${preset.height}:d=${totalDuration}:r=${preset.fps}`);
+  let lastVideoLayer = `${bgInputIdx}:v`;
+
+  // Check valid video inputs
+  const resolvedVideoInputs: { clip: VideoClip; inputIndex: number }[] = [];
+  for (const vClip of videoClips) {
+    const filePath = resolveMediaFilePath(vClip.src);
+    if (filePath) {
+      const idx = registerInput("-i", filePath);
+      resolvedVideoInputs.push({ clip: vClip, inputIndex: idx });
+    }
+  }
+
+  // Composite Video Clips onto Background
+  resolvedVideoInputs.forEach(({ clip, inputIndex }, idx) => {
+    const scaledLayer = `vscale_${idx}`;
+    const overlayLayer = `voverlay_${idx}`;
+    const start = clip.start || 0;
+    const end = start + (clip.duration || 5);
+    const offset = clip.offset || 0;
+
+    // Scale and trim clip to fit canvas
+    filterChains.push(
+      `[${inputIndex}:v]trim=start=${offset}:duration=${clip.duration},setpts=PTS-STARTPTS,scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p[${scaledLayer}]`
+    );
+
+    // Overlay at start time
+    filterChains.push(
+      `[${lastVideoLayer}][${scaledLayer}]overlay=0:0:enable='between(t,${start},${end})'[${overlayLayer}]`
+    );
+    lastVideoLayer = overlayLayer;
+  });
+
+  // Composite Text Clips
+  textClips.forEach((t, idx) => {
+    const textLayer = `text_${idx}`;
+    const textContent = escapeDrawText(t.text || "BAŞLIK");
+    const start = t.start || 0;
+    const end = start + (t.duration || 5);
+    const fontSize = t.fontSize || 44;
+
+    filterChains.push(
+      `[${lastVideoLayer}]drawtext=text='${textContent}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=h-180:box=1:boxcolor=0x000000@0.75:boxborderw=12:enable='between(t,${start},${end})'[${textLayer}]`
+    );
+    lastVideoLayer = textLayer;
+  });
+
+  // Composite OGraf Graphics Lower-Thirds
+  graphicsClips.forEach((g, idx) => {
+    const gfxLayer1 = `gfx_a_${idx}`;
+    const gfxLayer2 = `gfx_b_${idx}`;
+    const title = escapeDrawText(g.data?.title || g.name || "CANLI YAYIN");
+    const subtitle = escapeDrawText(g.data?.subtitle || "MCR HABER");
+    const start = g.start || 0;
+    const end = start + (g.duration || 5);
+
+    filterChains.push(
+      `[${lastVideoLayer}]drawtext=text='${title}':fontcolor=white:fontsize=36:x=120:y=h-220:box=1:boxcolor=0xC8102E@0.9:boxborderw=12:enable='between(t,${start},${end})'[${gfxLayer1}]`
+    );
+    filterChains.push(
+      `[${gfxLayer1}]drawtext=text='${subtitle}':fontcolor=0xE2E8F0:fontsize=24:x=120:y=h-160:box=1:boxcolor=0x0F172A@0.9:boxborderw=8:enable='between(t,${start},${end})'[${gfxLayer2}]`
+    );
+    lastVideoLayer = gfxLayer2;
+  });
+
+  // Check valid audio files
+  const resolvedAudioInputs: { clip: AudioClip; inputIndex: number }[] = [];
+  for (const aClip of audioClips) {
+    const filePath = resolveMediaFilePath(aClip.src);
+    if (filePath) {
+      const idx = registerInput("-i", filePath);
+      resolvedAudioInputs.push({ clip: aClip, inputIndex: idx });
+    }
+  }
+
+  let finalAudioMap: string;
+
+  if (resolvedAudioInputs.length > 0) {
+    const audioLayers: string[] = [];
+    resolvedAudioInputs.forEach(({ clip, inputIndex }, idx) => {
+      const aLayer = `a_${idx}`;
+      const delayMs = Math.round((clip.start || 0) * 1000);
+      const vol = clip.volume !== undefined ? clip.volume : 1.0;
+      filterChains.push(
+        `[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${vol}[${aLayer}]`
+      );
+      audioLayers.push(`[${aLayer}]`);
+    });
+
+    if (audioLayers.length === 1) {
+      finalAudioMap = audioLayers[0];
+    } else {
+      filterChains.push(`${audioLayers.join("")}amix=inputs=${audioLayers.length}:dropout_transition=2[mixed_a]`);
+      finalAudioMap = "[mixed_a]";
+    }
+  } else {
+    // If no audio clips present, generate silent tone
+    const silentToneIdx = registerInput("-f", "lavfi", "-i", `sine=frequency=440:sample_rate=48000:d=${totalDuration}`);
+    finalAudioMap = `${silentToneIdx}:a`;
+  }
+
+  // Construct FFmpeg command arguments
+  const filterArgs = filterChains.length > 0 ? ["-filter_complex", filterChains.join(";")] : [];
+  const videoMap = lastVideoLayer.startsWith("[") ? lastVideoLayer : `[${lastVideoLayer}]`;
+
+  const ffmpegArgs = [
+    "-y",
+    ...inputs,
+    ...filterArgs,
+    "-map", videoMap,
+    "-map", finalAudioMap,
+    "-t", `${totalDuration}`,
+    ...encoderArgs,
+    outputPath,
+  ];
+
+  console.log(`🎬 [MCR Renderer] Starting FFmpeg process: ${ffmpegArgs.join(" ")}`);
 
   return new Promise((resolve, reject) => {
-    // If real video files exist on the timeline, process and overlay graphics
-    if (realFileClips.length > 0) {
-      const primaryClip = realFileClips[0];
-      const localFilePath = primaryClip.resolvedPath;
-
-      const filterChains: string[] = [
-        `[0:v]scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p[base_v]`,
-      ];
-
-      let lastLayer = "base_v";
-
-      // Overlay text clips
-      textClips.forEach((t, i) => {
-        const nextLayer = `text_${i}`;
-        const escapedText = (t.text || "").replace(/'/g, "\\'").replace(/:/g, "\\:");
-        const start = t.start || 0;
-        const end = start + (t.duration || 5);
-        filterChains.push(
-          `[${lastLayer}]drawtext=text='${escapedText}':fontcolor=${t.textColor || "white"}:fontsize=${t.fontSize || 44}:x=(w-text_w)/2:y=h-160:box=1:boxcolor=black@0.7:boxborderw=10:enable='between(t,${start},${end})'[${nextLayer}]`
-        );
-        lastLayer = nextLayer;
-      });
-
-      // Overlay lower-third graphics
-      graphicsClips.forEach((g, i) => {
-        const nextLayer = `gfx_${i}`;
-        const title = (g.data?.title || g.name || "").replace(/'/g, "\\'").replace(/:/g, "\\:");
-        const subtitle = (g.data?.subtitle || "").replace(/'/g, "\\'").replace(/:/g, "\\:");
-        const start = g.start || 0;
-        const end = start + (g.duration || 5);
-        filterChains.push(
-          `[${lastLayer}]drawtext=text='${title}':fontcolor=white:fontsize=36:x=120:y=h-220:box=1:boxcolor=#C8102E@0.9:boxborderw=12:enable='between(t,${start},${end})',` +
-          `drawtext=text='${subtitle}':fontcolor=#E2E8F0:fontsize=24:x=120:y=h-160:box=1:boxcolor=#0F172A@0.9:boxborderw=8:enable='between(t,${start},${end})'[${nextLayer}]`
-        );
-        lastLayer = nextLayer;
-      });
-
-      const ffmpegArgs = [
-        "-y",
-        "-i", localFilePath,
-        "-filter_complex", filterChains.join(";"),
-        "-map", `[${lastLayer}]`,
-        "-map", "0:a?",
-        "-t", `${totalDuration}`,
-        ...targetEncoderArgs,
-        outputPath,
-      ];
-
-      const proc = spawn("ffmpeg", ffmpegArgs);
-      let stderr = "";
-      proc.stderr.on("data", (d) => { stderr += d.toString(); });
-      proc.on("close", (code) => {
-        if (code === 0) {
-          resolve({ outputPath });
-        } else {
-          console.error("[FFmpeg Real Clip Render Error]:", stderr);
-          reject(new Error(`FFmpeg exited with code ${code}`));
-        }
-      });
-      return;
-    }
-
-    // High-Quality Broadcast Studio Synthetic Video Renderer
-    const filterChains: string[] = [
-      `[0:v]drawtext=text='MCR NEWS 24 - CANLI YAYIN':fontcolor=white:fontsize=28:x=80:y=60:box=1:boxcolor=#C8102E@0.9:boxborderw=8[hdr_v]`,
-    ];
-    let lastLayer = "hdr_v";
-
-    // Overlay text titles
-    textClips.forEach((t, i) => {
-      const nextLayer = `text_${i}`;
-      const escapedText = (t.text || "SON DAKIKA HABER").replace(/'/g, "\\'").replace(/:/g, "\\:");
-      const start = t.start || 0;
-      const end = start + (t.duration || 5);
-      filterChains.push(
-        `[${lastLayer}]drawtext=text='${escapedText}':fontcolor=${t.textColor || "white"}:fontsize=${t.fontSize || 48}:x=(w-text_w)/2:y=(h-text_h)/2:box=1:boxcolor=black@0.7:boxborderw=16:enable='between(t,${start},${end})'[${nextLayer}]`
-      );
-      lastLayer = nextLayer;
-    });
-
-    // Overlay OGraf lower third graphics
-    graphicsClips.forEach((g, i) => {
-      const nextLayer = `gfx_${i}`;
-      const title = (g.data?.title || g.name || "Canlı Yayın Konuğu").replace(/'/g, "\\'").replace(/:/g, "\\:");
-      const subtitle = (g.data?.subtitle || "MCR Stüdyoları").replace(/'/g, "\\'").replace(/:/g, "\\:");
-      const start = g.start || 0;
-      const end = start + (g.duration || 5);
-      filterChains.push(
-        `[${lastLayer}]drawtext=text='${title}':fontcolor=white:fontsize=36:x=120:y=h-220:box=1:boxcolor=#C8102E@0.9:boxborderw=12:enable='between(t,${start},${end})',` +
-        `drawtext=text='${subtitle}':fontcolor=#E2E8F0:fontsize=24:x=120:y=h-160:box=1:boxcolor=#0F172A@0.9:boxborderw=8:enable='between(t,${start},${end})'[${nextLayer}]`
-      );
-      lastLayer = nextLayer;
-    });
-
-    const ffmpegArgs = [
-      "-y",
-      "-f", "lavfi",
-      "-i", `color=c=#090d16:s=${preset.width}x${preset.height}:d=${totalDuration}:r=${preset.fps}`,
-      "-f", "lavfi",
-      "-i", `sine=frequency=440:sample_rate=48000:d=${totalDuration}`,
-      "-filter_complex", filterChains.join(";"),
-      "-map", `[${lastLayer}]`,
-      "-map", "1:a",
-      "-t", `${totalDuration}`,
-      ...targetEncoderArgs,
-      outputPath,
-    ];
-
     const proc = spawn("ffmpeg", ffmpegArgs);
     let stderr = "";
-    proc.stderr.on("data", (d) => { stderr += d.toString(); });
+
+    proc.stderr.on("data", (data) => {
+      stderr += data.toString();
+    });
+
     proc.on("close", (code) => {
       if (code === 0) {
+        console.log(`✅ [MCR Renderer] Master render completed successfully: ${outputPath}`);
         resolve({ outputPath });
       } else {
-        console.error("[FFmpeg Synthetic Master Render Error]:", stderr);
-        reject(new Error(`FFmpeg exited with code ${code}`));
+        console.error(`❌ [MCR Renderer] FFmpeg exited with error code ${code}. Stderr snippet:`, stderr.slice(-1000));
+        reject(new Error(`FFmpeg error (code ${code}): ${stderr.slice(-300)}`));
       }
+    });
+
+    proc.on("error", (err) => {
+      console.error("[MCR Renderer] Process spawn error:", err);
+      reject(err);
     });
   });
 }
