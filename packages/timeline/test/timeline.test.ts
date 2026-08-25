@@ -10,6 +10,9 @@ import {
   addTrack,
   removeTrack,
   reorderTracks,
+  rippleDeleteClip,
+  splitAllClipsAtTime,
+  fitTimelineDuration,
   addMarker,
   removeMarker,
   formatTimecode,
@@ -195,4 +198,88 @@ describe("Timeline EDL Operations and Frame Queries", () => {
     expect(frame4.graphicsClips[0].status).toBe("OUT");
     expect(frame4.graphicsClips[0].outProgress).toBeCloseTo(0.5);
   });
+
+  it("should ripple delete a clip and shift subsequent clips to the left", () => {
+    const project = createDefaultTimelineProject();
+    let withClips = addClipToTrack(project, "track_video_1", {
+      id: "c1",
+      name: "Clip 1",
+      type: "video",
+      src: "1.mp4",
+      start: 0,
+      duration: 5,
+      offset: 0,
+    });
+    withClips = addClipToTrack(withClips, "track_video_1", {
+      id: "c2",
+      name: "Clip 2",
+      type: "video",
+      src: "2.mp4",
+      start: 5,
+      duration: 10,
+      offset: 0,
+    });
+    withClips = addClipToTrack(withClips, "track_video_1", {
+      id: "c3",
+      name: "Clip 3",
+      type: "video",
+      src: "3.mp4",
+      start: 15,
+      duration: 8,
+      offset: 0,
+    });
+
+    const rippled = rippleDeleteClip(withClips, "c2");
+    const v1Track = rippled.tracks.find((t) => t.id === "track_video_1")!;
+    expect(v1Track.clips.length).toBe(2);
+    expect(v1Track.clips[0].id).toBe("c1");
+    expect(v1Track.clips[0].start).toBe(0);
+    expect(v1Track.clips[1].id).toBe("c3");
+    expect(v1Track.clips[1].start).toBe(5); // shifted 10s earlier
+  });
+
+  it("should split all clips across tracks at playhead time", () => {
+    let project = createDefaultTimelineProject();
+    project = addClipToTrack(project, "track_video_1", {
+      id: "v_split",
+      name: "Video Clip",
+      type: "video",
+      src: "v.mp4",
+      start: 0,
+      duration: 10,
+      offset: 0,
+    });
+    project = addClipToTrack(project, "track_audio_1", {
+      id: "a_split",
+      name: "Audio Clip",
+      type: "audio",
+      src: "a.mp3",
+      start: 2,
+      duration: 8,
+      offset: 0,
+    });
+
+    const allSplit = splitAllClipsAtTime(project, 5);
+    const vTrack = allSplit.tracks.find((t) => t.id === "track_video_1")!;
+    const aTrack = allSplit.tracks.find((t) => t.id === "track_audio_1")!;
+    expect(vTrack.clips.length).toBe(2);
+    expect(aTrack.clips.length).toBe(2);
+  });
+
+  it("should fit timeline project duration to the end of last clip", () => {
+    let project = createDefaultTimelineProject();
+    project = addClipToTrack(project, "track_video_1", {
+      id: "v_long",
+      name: "Long Video",
+      type: "video",
+      src: "v.mp4",
+      start: 20,
+      duration: 35,
+      offset: 0,
+    });
+
+    const fitted = fitTimelineDuration(project, 5);
+    expect(fitted.duration).toBe(60); // 20 + 35 + 5 = 60
+  });
 });
+

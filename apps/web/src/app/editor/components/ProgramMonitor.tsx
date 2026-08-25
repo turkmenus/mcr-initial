@@ -13,6 +13,9 @@ import {
   Film,
   Sparkles,
   Monitor,
+  SkipBack,
+  SkipForward,
+  Repeat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,6 +34,7 @@ interface ProgramMonitorProps {
   currentTime: number;
   isPlaying: boolean;
   onTogglePlay: () => void;
+  onSeek?: (time: number) => void;
   aspectRatio?: "16:9" | "9:16" | "1:1";
   onAspectRatioChange?: (ratio: "16:9" | "9:16" | "1:1") => void;
   canvasRefCallback?: (canvas: HTMLCanvasElement | null) => void;
@@ -41,6 +45,7 @@ export function ProgramMonitor({
   currentTime,
   isPlaying,
   onTogglePlay,
+  onSeek,
   aspectRatio = "16:9",
   onAspectRatioChange,
   canvasRefCallback,
@@ -50,6 +55,8 @@ export function ProgramMonitor({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showSafeZones, setShowSafeZones] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isLooping, setIsLooping] = useState(false);
+
   const videoElementsRef = useRef<Map<string, HTMLVideoElement>>(new Map());
   const imagesRef = useRef<Map<string, HTMLImageElement>>(new Map());
 
@@ -123,6 +130,14 @@ export function ProgramMonitor({
     audioEngine.syncTimelineAudio(project, currentTime, isPlaying);
   }, [project, currentTime, isPlaying, isMuted]);
 
+  // Step 1 Frame
+  const handleStepFrame = (deltaFrames: number) => {
+    if (!onSeek) return;
+    const frameTime = 1 / (project.fps || 50);
+    const newTime = Math.max(0, Math.min(project.duration || 60, currentTime + deltaFrames * frameTime));
+    onSeek(newTime);
+  };
+
   // Main Canvas Render Loop
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -168,25 +183,25 @@ export function ProgramMonitor({
   // Aspect ratio styling
   const aspectClass =
     aspectRatio === "9:16"
-      ? "aspect-[9/16] max-h-[380px]"
+      ? "aspect-[9/16] max-h-[440px]"
       : aspectRatio === "1:1"
-      ? "aspect-square max-h-[380px]"
+      ? "aspect-square max-h-[440px]"
       : "aspect-video w-full";
 
   return (
     <div
       ref={containerRef}
-      className="flex-1 flex flex-col bg-[#0b0e14] border border-[#1e2538] rounded-lg overflow-hidden select-none shadow-lg"
+      className="flex-1 flex flex-col bg-[#0b0e14] border border-[#1e2538] rounded-lg overflow-hidden select-none shadow-lg h-full"
     >
-      {/* Monitor Header Toolbar */}
-      <div className="h-8 px-3 bg-[#121722] border-b border-[#1e2538] flex items-center justify-between">
+      {/* 1. Header Toolbar */}
+      <div className="h-8 px-3 bg-[#121722] border-b border-[#1e2538] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-2">
           <Monitor className="w-3.5 h-3.5 text-sky-400" />
-          <span className="text-[11px] font-semibold text-slate-300 uppercase tracking-wider">
-            Program Monitor
+          <span className="text-[11px] font-bold text-slate-200 uppercase tracking-wider">
+            PROGRAM MONİTÖRÜ (MASTER)
           </span>
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/50 text-slate-400 border border-[#1e2538]">
-            1080p50
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-black/60 text-sky-400 border border-sky-500/30">
+            {formatTimecode(currentTime, project.fps || 50)}
           </span>
         </div>
 
@@ -199,7 +214,7 @@ export function ProgramMonitor({
                 onClick={() => onAspectRatioChange?.(ratio)}
                 className={`px-2 py-0.5 text-[10px] font-bold rounded transition ${
                   aspectRatio === ratio
-                    ? "bg-sky-600 text-white"
+                    ? "bg-sky-600 text-white shadow-sm"
                     : "text-slate-400 hover:text-slate-200"
                 }`}
               >
@@ -240,7 +255,7 @@ export function ProgramMonitor({
         </div>
       </div>
 
-      {/* Monitor Display Surface */}
+      {/* 2. Monitor Display Surface */}
       <div className="flex-1 bg-[#05070a] flex items-center justify-center p-2 relative overflow-hidden">
         <div
           className={`relative max-w-full max-h-full flex items-center justify-center shadow-2xl bg-black rounded overflow-hidden ${aspectClass}`}
@@ -250,6 +265,44 @@ export function ProgramMonitor({
             className="w-full h-full object-contain cursor-pointer"
             onClick={onTogglePlay}
           />
+        </div>
+      </div>
+
+      {/* 3. Transport Bar Controls */}
+      <div className="h-8 px-3 bg-[#10141d] border-t border-[#1e2538] flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => handleStepFrame(-1)}
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1a2130] transition"
+            title="1 Kare Geri (Sol Ok)"
+          >
+            <SkipBack className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={onTogglePlay}
+            className="p-1 rounded text-sky-400 hover:text-sky-300 hover:bg-[#1a2130] transition"
+            title={isPlaying ? "Durdur (Space)" : "Oynat (Space)"}
+          >
+            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 fill-current" />}
+          </button>
+
+          <button
+            onClick={() => handleStepFrame(1)}
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1a2130] transition"
+            title="1 Kare İleri (Sağ Ok)"
+          >
+            <SkipForward className="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono text-slate-400">
+            {formatTimecode(currentTime, project.fps || 50)} / {formatTimecode(project.duration || 60, project.fps || 50)}
+          </span>
+          <span className="text-[9px] font-mono text-emerald-400 px-1 py-0.2 rounded bg-emerald-950/40 border border-emerald-500/30">
+            50 FPS
+          </span>
         </div>
       </div>
     </div>
@@ -281,6 +334,7 @@ function drawVideoClip(
   ctx.rotate(rotation);
   ctx.scale(scale, scale);
 
+  // Filters & Color Grading
   const filters: string[] = [];
   if (clip.brightness && clip.brightness !== 100) filters.push(`brightness(${clip.brightness}%)`);
   if (clip.contrast && clip.contrast !== 100) filters.push(`contrast(${clip.contrast}%)`);
@@ -293,20 +347,11 @@ function drawVideoClip(
   if (videoEl && videoEl.readyState >= 2) {
     ctx.drawImage(videoEl, -width / 2, -height / 2, width, height);
   } else {
-    // Synthetic Clean Broadcast Studio Backdrop
+    // High-definition backdrop
     const grad = ctx.createLinearGradient(-width / 2, -height / 2, width / 2, height / 2);
-    if (clip.src.includes("studio")) {
-      grad.addColorStop(0, "#090d16");
-      grad.addColorStop(0.5, "#0f172a");
-      grad.addColorStop(1, "#0284c7");
-    } else if (clip.src.includes("city")) {
-      grad.addColorStop(0, "#0b132b");
-      grad.addColorStop(0.5, "#1c2541");
-      grad.addColorStop(1, "#3a506b");
-    } else {
-      grad.addColorStop(0, "#0f172a");
-      grad.addColorStop(1, "#1e293b");
-    }
+    grad.addColorStop(0, "#090d16");
+    grad.addColorStop(0.5, "#0f172a");
+    grad.addColorStop(1, "#0284c7");
     ctx.fillStyle = grad;
     ctx.fillRect(-width / 2, -height / 2, width, height);
 
@@ -449,7 +494,12 @@ function drawTextClip(
   if (bgColor && bgColor !== "transparent") {
     ctx.fillStyle = bgColor;
     const padding = 16;
-    const rectX = textAlign === "left" ? posX - padding : textAlign === "right" ? posX - textWidth - padding : posX - textWidth / 2 - padding;
+    const rectX =
+      textAlign === "left"
+        ? posX - padding
+        : textAlign === "right"
+        ? posX - textWidth - padding
+        : posX - textWidth / 2 - padding;
     ctx.fillRect(rectX, posY - fontSize / 2 - padding, textWidth + padding * 2, fontSize + padding * 2);
   }
 

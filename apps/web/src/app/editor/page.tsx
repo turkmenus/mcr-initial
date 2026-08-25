@@ -54,6 +54,7 @@ import {
   addTrack,
   removeTrack,
   reorderTracks,
+  rippleDeleteClip,
   updateTrack,
   addMarker,
   removeMarker,
@@ -565,6 +566,31 @@ export default function EditorPage() {
     if (selectedClipId === clipId) setSelectedClipId(null);
   };
 
+  const handleRippleDeleteClip = (clipId: string) => {
+    const nextProject = rippleDeleteClip(project, clipId);
+    pushStateToHistory(nextProject);
+    if (selectedClipId === clipId) setSelectedClipId(null);
+  };
+
+  const handleInsertFromSource = (inPoint = 0, outPoint = 10) => {
+    if (!selectedClip) return;
+    const clipDur = Math.max(0.2, outPoint - inPoint);
+    const isAudio = selectedClip.type === "audio";
+    let targetTrack = project.tracks.find((t) => (isAudio ? t.type === "audio" : t.type === "video"));
+    if (!targetTrack) targetTrack = project.tracks[0];
+
+    const newClip: TimelineClip = {
+      ...selectedClip,
+      id: `clip_${selectedClip.type}_${Date.now()}`,
+      start: currentTime,
+      duration: clipDur,
+      offset: inPoint,
+    };
+    const nextProject = addClipToTrack(project, targetTrack.id, newClip);
+    pushStateToHistory(nextProject);
+    handleSelectClip(newClip.id);
+  };
+
   const handleDuplicateClip = (clipId: string) => {
     const nextProject = duplicateClip(project, clipId);
     pushStateToHistory(nextProject);
@@ -946,7 +972,7 @@ export default function EditorPage() {
                 <div className="flex-1 h-full border-r border-[#222733] overflow-hidden">
                   <SourceMonitor
                     clip={selectedClip}
-                    onInsertToTimeline={() => selectedClip && handleAddAsset(selectedClip as any)}
+                    onInsertToTimeline={handleInsertFromSource}
                   />
                 </div>
               )}
@@ -958,6 +984,7 @@ export default function EditorPage() {
                   currentTime={currentTime}
                   isPlaying={isPlaying}
                   onTogglePlay={() => setIsPlaying(!isPlaying)}
+                  onSeek={setCurrentTime}
                   aspectRatio={aspectRatio}
                   onAspectRatioChange={setAspectRatio}
                   canvasRefCallback={(c) => {
@@ -1002,6 +1029,7 @@ export default function EditorPage() {
               onTrimClip={handleTrimClip}
               onSplitClip={handleSplitClip}
               onDeleteClip={handleDeleteClip}
+              onRippleDeleteClip={handleRippleDeleteClip}
               onDuplicateClip={handleDuplicateClip}
               onAddTrack={handleAddTrack}
               onRemoveTrack={handleRemoveTrack}

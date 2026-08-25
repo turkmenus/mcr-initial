@@ -422,3 +422,81 @@ export function removeMarker(project: TimelineProject, markerId: string): Timeli
   };
 }
 
+/**
+ * Ripple deletes a clip and shifts all subsequent clips on that track to the left to close the gap
+ */
+export function rippleDeleteClip(project: TimelineProject, clipId: string): TimelineProject {
+  let targetTrackId: string | null = null;
+  let targetClip: TimelineClip | null = null;
+
+  for (const track of project.tracks) {
+    const found = track.clips.find((c) => c.id === clipId);
+    if (found) {
+      targetTrackId = track.id;
+      targetClip = found;
+      break;
+    }
+  }
+
+  if (!targetClip || !targetTrackId) return project;
+
+  const clipDuration = targetClip.duration;
+  const clipStart = targetClip.start;
+
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: project.tracks.map((track) => {
+      if (track.id !== targetTrackId) return track;
+      return {
+        ...track,
+        clips: track.clips
+          .filter((c) => c.id !== clipId)
+          .map((c) => {
+            if (c.start > clipStart) {
+              return { ...c, start: Math.max(0, c.start - clipDuration) };
+            }
+            return c;
+          })
+          .sort((a, b) => a.start - b.start),
+      };
+    }),
+  };
+}
+
+/**
+ * Splits all active clips across all unlocked tracks at splitTime
+ */
+export function splitAllClipsAtTime(project: TimelineProject, splitTime: number): TimelineProject {
+  let currentProject = project;
+  for (const track of project.tracks) {
+    if (track.locked) continue;
+    for (const clip of track.clips) {
+      if (splitTime > clip.start && splitTime < clip.start + clip.duration) {
+        currentProject = splitClip(currentProject, clip.id, splitTime);
+      }
+    }
+  }
+  return currentProject;
+}
+
+/**
+ * Recalculates and expands/contracts total project duration to fit the furthest ending clip (+ buffer)
+ */
+export function fitTimelineDuration(project: TimelineProject, bufferSeconds = 5): TimelineProject {
+  let maxEndTime = 15;
+  for (const track of project.tracks) {
+    for (const clip of track.clips) {
+      const endTime = clip.start + clip.duration;
+      if (endTime > maxEndTime) {
+        maxEndTime = endTime;
+      }
+    }
+  }
+  return {
+    ...project,
+    duration: Math.ceil(maxEndTime + bufferSeconds),
+    updatedAt: Date.now(),
+  };
+}
+
