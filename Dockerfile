@@ -68,7 +68,7 @@ RUN pnpm build:renderer
 
 FROM base AS renderer
 WORKDIR /app
-RUN apk add --no-cache ffmpeg
+RUN apk add --no-cache ffmpeg ttf-dejavu fontconfig
 
 ENV NODE_ENV=production
 ENV PORT=4002

@@ -80,6 +80,31 @@ export function resolveMediaFilePath(src: string): string | null {
 }
 
 /**
+ * Finds the first available TrueType font file in bundled assets or system paths.
+ */
+export function getAvailableFontFile(): string | null {
+  const candidates = [
+    path.resolve(process.cwd(), "apps/renderer/assets/fonts/DejaVuSans-Bold.ttf"),
+    path.resolve(process.cwd(), "assets/fonts/DejaVuSans-Bold.ttf"),
+    path.resolve(process.cwd(), "apps/renderer/assets/fonts/DejaVuSans.ttf"),
+    path.resolve(process.cwd(), "assets/fonts/DejaVuSans.ttf"),
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/TTF/DejaVuSans.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSansBold.ttf",
+  ];
+
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+/**
  * Safely escapes strings for FFmpeg drawtext filter parameters.
  */
 function escapeDrawText(text: string): string {
@@ -136,6 +161,8 @@ async function executeFfmpegRender(
   useGpu: boolean
 ): Promise<{ outputPath: string }> {
   const encoderArgs = getPresetFfmpegArgs(preset, useGpu);
+  const fontPath = getAvailableFontFile();
+  const fontOpt = fontPath ? `fontfile='${fontPath}':` : "";
 
   // Extract all tracks and clips
   const allTracks = project.tracks || [];
@@ -198,7 +225,7 @@ async function executeFfmpegRender(
     const fontSize = t.fontSize || 44;
 
     filterChains.push(
-      `[${lastVideoLayer}]drawtext=text='${textContent}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=h-180:box=1:boxcolor=0x000000@0.75:boxborderw=12:enable='between(t,${start},${end})'[${textLayer}]`
+      `[${lastVideoLayer}]drawtext=${fontOpt}text='${textContent}':fontcolor=white:fontsize=${fontSize}:x=(w-text_w)/2:y=h-180:box=1:boxcolor=0x000000@0.75:boxborderw=12:enable='between(t,${start},${end})'[${textLayer}]`
     );
     lastVideoLayer = textLayer;
   });
@@ -213,10 +240,10 @@ async function executeFfmpegRender(
     const end = start + (g.duration || 5);
 
     filterChains.push(
-      `[${lastVideoLayer}]drawtext=text='${title}':fontcolor=white:fontsize=36:x=120:y=h-220:box=1:boxcolor=0xC8102E@0.9:boxborderw=12:enable='between(t,${start},${end})'[${gfxLayer1}]`
+      `[${lastVideoLayer}]drawtext=${fontOpt}text='${title}':fontcolor=white:fontsize=36:x=120:y=h-220:box=1:boxcolor=0xC8102E@0.9:boxborderw=12:enable='between(t,${start},${end})'[${gfxLayer1}]`
     );
     filterChains.push(
-      `[${gfxLayer1}]drawtext=text='${subtitle}':fontcolor=0xE2E8F0:fontsize=24:x=120:y=h-160:box=1:boxcolor=0x0F172A@0.9:boxborderw=8:enable='between(t,${start},${end})'[${gfxLayer2}]`
+      `[${gfxLayer1}]drawtext=${fontOpt}text='${subtitle}':fontcolor=0xE2E8F0:fontsize=24:x=120:y=h-160:box=1:boxcolor=0x0F172A@0.9:boxborderw=8:enable='between(t,${start},${end})'[${gfxLayer2}]`
     );
     lastVideoLayer = gfxLayer2;
   });
