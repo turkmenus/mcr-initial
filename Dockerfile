@@ -55,6 +55,8 @@ COPY --from=builder-realtime /app ./
 
 EXPOSE 4001
 EXPOSE 5250
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e 'fetch("http://127.0.0.1:4001/api/health").then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))'
 CMD ["node", "apps/realtime/dist/server.js"]
 
 # ==========================================
@@ -77,6 +79,8 @@ ENV USE_GPU_ACCEL=auto
 COPY --from=builder-renderer /app ./
 
 EXPOSE 4002
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD node -e 'fetch("http://127.0.0.1:4002/api/health").then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))'
 CMD ["node", "apps/renderer/dist/server.js"]
 
 # ==========================================
@@ -102,4 +106,6 @@ ENV INTERNAL_REALTIME_URL=http://realtime:4001
 COPY --from=builder-web /app ./
 
 EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e 'fetch("http://127.0.0.1:3000/api/health").then(r=>r.ok?process.exit(0):process.exit(1)).catch(()=>process.exit(1))'
 CMD ["pnpm", "--filter", "@mcr/web", "start"]

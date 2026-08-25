@@ -79,13 +79,15 @@ casparClient.on("command_sent", (rawCmd: string) => {
 
 casparClient.connect();
 
-// HTTP Endpoints
-app.get("/health", (req, res) => {
+// HTTP Healthcheck Endpoints
+app.get(["/health", "/api/health"], (req, res) => {
   res.json({
     status: "ok",
-    service: "MCR Production Realtime & Switcher Hub",
+    service: "mcr-realtime",
+    uptime: Math.floor(process.uptime()),
     timestamp: Date.now(),
     casparStatus: state.casparStatus,
+    connectedWsClients: wss ? wss.clients.size : 0,
     activeLayers: Object.keys(state.activeCgLayers).length,
     rundownCount: state.rundown.length,
     mediaCount: db.getMediaAssets().length,

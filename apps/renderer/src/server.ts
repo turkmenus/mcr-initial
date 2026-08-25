@@ -29,10 +29,12 @@ app.use("/renders", express.static(RENDERS_DIR));
 app.use("/thumbnails", express.static(THUMBS_DIR));
 app.use("/uploads", express.static(UPLOADS_DIR));
 
-app.get("/health", (req, res) => {
+// HTTP Healthcheck Endpoints
+app.get(["/health", "/api/health"], (req, res) => {
   res.json({
     status: "ok",
-    service: "MCR Render Worker & Media Asset Manager",
+    service: "mcr-renderer",
+    uptime: Math.floor(process.uptime()),
     timestamp: Date.now(),
     mediaCount: db.getMediaAssets().length,
   });
