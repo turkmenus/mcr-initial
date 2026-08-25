@@ -3,14 +3,16 @@
 import React, { useState, useRef } from "react";
 import {
   Film,
-  Music,
   Sparkles,
   Type,
-  Plus,
-  Play,
+  Music,
   Upload,
+  Plus,
   Search,
   Check,
+  FolderOpen,
+  CloudUpload,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +23,6 @@ import {
   STOCK_TEXT_PRESETS,
   SampleMediaItem,
 } from "../data/sampleMedia";
-import { audioEngine } from "./AudioEngine";
 import { MediaAsset } from "@mcr/db";
 
 interface MediaLibraryPanelProps {
@@ -48,11 +49,14 @@ export function MediaLibraryPanel({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<"media" | "ograf" | "text" | "audio">("media");
   const [searchQuery, setSearchQuery] = useState("");
+  const [isDragOverPanel, setIsDragOverPanel] = useState(false);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      onUploadFile(files[0]);
+      for (let i = 0; i < files.length; i++) {
+        onUploadFile(files[i]);
+      }
     }
   };
 
@@ -66,8 +70,6 @@ export function MediaLibraryPanel({
     t.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const [isDragOverPanel, setIsDragOverPanel] = useState(false);
-
   return (
     <div
       onDragOver={(e) => {
@@ -79,21 +81,51 @@ export function MediaLibraryPanel({
         e.preventDefault();
         setIsDragOverPanel(false);
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-          onUploadFile(e.dataTransfer.files[0]);
+          for (let i = 0; i < e.dataTransfer.files.length; i++) {
+            onUploadFile(e.dataTransfer.files[i]);
+          }
         }
       }}
-      className={`flex-1 flex flex-col h-full overflow-hidden select-none bg-[#0b0e14] transition ${
-        isDragOverPanel ? "ring-2 ring-inset ring-[#00e5ff] bg-[#101724]" : ""
+      className={`flex-1 flex flex-col h-full overflow-hidden select-none bg-[#0e1117] border-r border-[#222733] transition ${
+        isDragOverPanel ? "ring-2 ring-inset ring-[#00e5ff] bg-[#141b28]" : ""
       }`}
     >
-      {/* Category Tabs */}
-      <div className="flex items-center justify-between border-b border-[#1e2538] px-3 py-2 bg-[#121722]">
-        <div className="flex items-center gap-1 bg-[#0b0e14] p-0.5 rounded border border-[#1e2538]">
+      {/* 1. Header Bar with Prominent Upload Action */}
+      <div className="h-10 px-3 border-b border-[#222733] bg-[#141822] flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200 tracking-wide">
+          <FolderOpen className="w-3.5 h-3.5 text-sky-400" />
+          <span>MEDYA KÜTÜPHANESİ</span>
+        </div>
+
+        {/* Highlighted Device Upload Button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          className="flex items-center gap-1 px-2.5 py-1 bg-sky-600 hover:bg-sky-500 active:bg-sky-700 text-white rounded text-[11px] font-bold shadow transition disabled:opacity-50"
+          title="Bilgisayarınızdan video, ses veya resim yükleyin"
+        >
+          <Upload className="w-3 h-3 text-white" />
+          <span>+ Yükle</span>
+        </button>
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept="video/*,audio/*,image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+      </div>
+
+      {/* 2. Category Tabs */}
+      <div className="p-2 border-b border-[#222733] bg-[#10131c] flex-shrink-0">
+        <div className="grid grid-cols-4 gap-1 bg-[#090b10] p-0.5 rounded border border-[#222733]">
           <button
             onClick={() => setActiveTab("media")}
-            className={`px-2.5 py-1 text-[11px] font-semibold rounded flex items-center gap-1.5 transition ${
+            className={`py-1 text-[11px] font-semibold rounded flex items-center justify-center gap-1 transition ${
               activeTab === "media"
-                ? "bg-[#1e2538] text-white"
+                ? "bg-[#1f2638] text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -102,9 +134,9 @@ export function MediaLibraryPanel({
           </button>
           <button
             onClick={() => setActiveTab("ograf")}
-            className={`px-2.5 py-1 text-[11px] font-semibold rounded flex items-center gap-1.5 transition ${
+            className={`py-1 text-[11px] font-semibold rounded flex items-center justify-center gap-1 transition ${
               activeTab === "ograf"
-                ? "bg-[#1e2538] text-white"
+                ? "bg-[#1f2638] text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -113,9 +145,9 @@ export function MediaLibraryPanel({
           </button>
           <button
             onClick={() => setActiveTab("text")}
-            className={`px-2.5 py-1 text-[11px] font-semibold rounded flex items-center gap-1.5 transition ${
+            className={`py-1 text-[11px] font-semibold rounded flex items-center justify-center gap-1 transition ${
               activeTab === "text"
-                ? "bg-[#1e2538] text-white"
+                ? "bg-[#1f2638] text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -124,9 +156,9 @@ export function MediaLibraryPanel({
           </button>
           <button
             onClick={() => setActiveTab("audio")}
-            className={`px-2.5 py-1 text-[11px] font-semibold rounded flex items-center gap-1.5 transition ${
+            className={`py-1 text-[11px] font-semibold rounded flex items-center justify-center gap-1 transition ${
               activeTab === "audio"
-                ? "bg-[#1e2538] text-white"
+                ? "bg-[#1f2638] text-white shadow-sm"
                 : "text-slate-400 hover:text-slate-200"
             }`}
           >
@@ -134,53 +166,48 @@ export function MediaLibraryPanel({
             <span>Ses FX</span>
           </button>
         </div>
-
-        {/* Upload Button */}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={isUploading}
-          className="h-7 text-[11px] font-semibold gap-1.5 bg-[#161b24] border-[#262d3d] hover:bg-[#1e2538] text-slate-200"
-        >
-          <Upload className="w-3 h-3 text-sky-400" />
-          <span>Yükle</span>
-        </Button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="video/*,audio/*,image/*"
-          onChange={handleFileChange}
-          className="hidden"
-        />
       </div>
 
-      {/* Search Bar */}
-      <div className="p-2 border-b border-[#1e2538] bg-[#0e1217]">
+      {/* 3. Search Bar */}
+      <div className="px-2 py-1.5 border-b border-[#222733] bg-[#0c0f16] flex-shrink-0">
         <div className="relative">
           <Search className="w-3 h-3 absolute left-2.5 top-2.5 text-slate-500" />
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Öğe ara..."
-            className="h-7 pl-7 text-[11px] bg-[#121722] border-[#1e2538] text-slate-200 placeholder:text-slate-500"
+            className="h-7 pl-7 text-[11px] bg-[#121620] border-[#222733] text-slate-200 placeholder:text-slate-500"
           />
         </div>
       </div>
 
       {uploadProgress && (
-        <div className="px-3 py-1.5 bg-sky-950/40 border-b border-sky-500/30 text-[11px] font-mono text-sky-300">
-          {uploadProgress}
+        <div className="px-3 py-1 bg-sky-950/60 border-b border-sky-500/40 text-[11px] font-mono text-sky-300 flex items-center justify-between">
+          <span>{uploadProgress}</span>
         </div>
       )}
 
-      {/* Main Asset List */}
+      {/* 4. Main Scrollable Asset List */}
       <div className="flex-1 overflow-hidden p-2">
         <ScrollArea className="h-full pr-1">
           {/* 1. MEDIA TAB */}
           {activeTab === "media" && (
             <div className="space-y-3">
-              {/* User Uploaded */}
+              {/* Drag & Drop Upload Zone Card */}
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                className="p-3 border-2 border-dashed border-[#2a364f] hover:border-sky-500 rounded bg-[#121622] hover:bg-[#161c2c] text-center cursor-pointer transition group"
+              >
+                <CloudUpload className="w-6 h-6 mx-auto text-sky-400 group-hover:scale-110 transition mb-1" />
+                <div className="text-[11px] font-bold text-slate-200">
+                  Cihazdan Dosya Seçin veya Sürükleyin
+                </div>
+                <div className="text-[9px] text-slate-400 mt-0.5 font-mono">
+                  MP4, MOV, WEBM, MP3, WAV, PNG, JPG
+                </div>
+              </div>
+
+              {/* User Uploaded Media */}
               {mediaAssets.length > 0 && (
                 <div>
                   <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
@@ -240,7 +267,7 @@ export function MediaLibraryPanel({
               {/* Built-in Stock Media */}
               <div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
-                  Hazır Klipler
+                  Hazır Yayın Klipleri
                 </div>
                 <div className="space-y-1">
                   {filteredStock.map((item) => (
@@ -295,25 +322,41 @@ export function MediaLibraryPanel({
 
           {/* 2. OGRAF TAB */}
           {activeTab === "ograf" && (
-            <div className="space-y-1">
-              {filteredOgraf.map((tmpl) => (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
+                Canlı Yayın Alt Bant & Şablonlar
+              </div>
+              {filteredOgraf.map((t) => (
                 <div
-                  key={tmpl.templateId}
-                  className="p-2 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition"
+                  key={t.templateId}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      "application/json",
+                      JSON.stringify({
+                        type: "graphics",
+                        templateId: t.templateId,
+                        name: t.name,
+                        duration: t.duration,
+                        data: t.defaultData,
+                      })
+                    );
+                  }}
+                  className="p-2 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition cursor-grab active:cursor-grabbing"
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <div
                       className="w-7 h-7 rounded flex items-center justify-center font-bold flex-shrink-0"
-                      style={{ backgroundColor: `${tmpl.color}20`, color: tmpl.color }}
+                      style={{ backgroundColor: `${t.color}20`, color: t.color }}
                     >
                       <Sparkles className="w-3.5 h-3.5" />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[11px] font-medium text-slate-200 truncate">
-                        {tmpl.name}
+                      <div className="text-[11px] font-semibold text-slate-200 truncate">
+                        {t.name}
                       </div>
                       <div className="text-[9px] text-slate-500 font-mono">
-                        {tmpl.category} • {tmpl.duration}s
+                        {t.category} • {t.duration}s
                       </div>
                     </div>
                   </div>
@@ -321,7 +364,7 @@ export function MediaLibraryPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onAddOGrafTemplate(tmpl)}
+                    onClick={() => onAddOGrafTemplate(t)}
                     className="h-6 px-2 text-[10px] font-semibold text-rose-400 hover:bg-rose-500/10 gap-1 flex-shrink-0"
                   >
                     <Plus className="w-3 h-3" />
@@ -334,22 +377,41 @@ export function MediaLibraryPanel({
 
           {/* 3. TEXT TAB */}
           {activeTab === "text" && (
-            <div className="space-y-1">
-              {filteredText.map((preset) => (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
+                Başlık ve Metin Hazır Ayarları
+              </div>
+              {filteredText.map((item) => (
                 <div
-                  key={preset.id}
-                  className="p-2 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition"
+                  key={item.id}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData(
+                      "application/json",
+                      JSON.stringify({
+                        type: "text",
+                        name: item.name,
+                        text: item.text,
+                        duration: item.duration,
+                        fontSize: item.fontSize,
+                        textColor: item.textColor,
+                        backgroundColor: item.backgroundColor,
+                        textAlign: item.textAlign,
+                      })
+                    );
+                  }}
+                  className="p-2 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition cursor-grab active:cursor-grabbing"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="w-7 h-7 rounded bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold flex-shrink-0">
+                    <div className="w-7 h-7 rounded bg-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0">
                       <Type className="w-3.5 h-3.5" />
                     </div>
                     <div className="min-w-0">
-                      <div className="text-[11px] font-medium text-slate-200 truncate">
-                        {preset.name}
+                      <div className="text-[11px] font-semibold text-slate-200 truncate">
+                        {item.name}
                       </div>
                       <div className="text-[9px] text-slate-500 font-mono truncate">
-                        &ldquo;{preset.text}&rdquo;
+                        {item.text}
                       </div>
                     </div>
                   </div>
@@ -357,7 +419,7 @@ export function MediaLibraryPanel({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => onAddTextPreset(preset)}
+                    onClick={() => onAddTextPreset(item)}
                     className="h-6 px-2 text-[10px] font-semibold text-amber-400 hover:bg-amber-500/10 gap-1 flex-shrink-0"
                   >
                     <Plus className="w-3 h-3" />
@@ -370,57 +432,57 @@ export function MediaLibraryPanel({
 
           {/* 4. AUDIO TAB */}
           {activeTab === "audio" && (
-            <div className="space-y-1">
-              {[
-                { name: "Haber Açılış Jingle", type: "jingle" as const, desc: "Fanfare jingle teması", dur: 6 },
-                { name: "Son Dakika Stinger Hit", type: "hit" as const, desc: "Sub-bass dramatik vurgu", dur: 3 },
-                { name: "Deklanşör Sesi", type: "click" as const, desc: "Fotoğraf ve flaş efekti", dur: 1 },
-                { name: "Sayım Bip Tonu", type: "beep" as const, desc: "Geri sayım sinyali", dur: 1 },
-              ].map((sfx, idx) => (
-                <div
-                  key={idx}
-                  className="p-2 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <button
-                      onClick={() => audioEngine.playSoundEffect(sfx.type)}
-                      className="w-7 h-7 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 flex items-center justify-center flex-shrink-0 transition"
-                      title="Ön Dinle"
-                    >
-                      <Play className="w-3.5 h-3.5 fill-emerald-400" />
-                    </button>
-                    <div className="min-w-0">
-                      <div className="text-[11px] font-medium text-slate-200 truncate">
-                        {sfx.name}
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1 mb-1.5">
+                Ses Efektleri ve Fon Müzikleri
+              </div>
+              {filteredStock
+                .filter((s) => s.type === "audio")
+                .map((item) => (
+                  <div
+                    key={item.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(
+                        "application/json",
+                        JSON.stringify({
+                          type: "audio",
+                          name: item.name,
+                          src: item.src,
+                          duration: item.duration,
+                        })
+                      );
+                    }}
+                    className="p-2 rounded border border-[#1e2538] bg-[#121722] hover:bg-[#161c2b] flex items-center justify-between gap-2 transition cursor-grab active:cursor-grabbing"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="w-7 h-7 rounded flex items-center justify-center font-bold flex-shrink-0"
+                        style={{ backgroundColor: `${item.color}20`, color: item.color }}
+                      >
+                        <Music className="w-3.5 h-3.5" />
                       </div>
-                      <div className="text-[9px] text-slate-500 font-mono">
-                        {sfx.desc} • {sfx.dur}s
+                      <div className="min-w-0">
+                        <div className="text-[11px] font-semibold text-slate-200 truncate">
+                          {item.name}
+                        </div>
+                        <div className="text-[9px] text-slate-500 font-mono">
+                          {item.category} • {item.duration}s
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      onAddStockMedia({
-                        id: `sfx_${Date.now()}_${idx}`,
-                        name: sfx.name,
-                        type: "audio",
-                        duration: sfx.dur,
-                        category: "SFX",
-                        color: "#10B981",
-                        description: sfx.desc,
-                        src: `synthetic://${sfx.type}`,
-                      })
-                    }
-                    className="h-6 px-2 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/10 gap-1 flex-shrink-0"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Ekle</span>
-                  </Button>
-                </div>
-              ))}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onAddStockMedia(item)}
+                      className="h-6 px-2 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-500/10 gap-1 flex-shrink-0"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Ekle</span>
+                    </Button>
+                  </div>
+                ))}
             </div>
           )}
         </ScrollArea>

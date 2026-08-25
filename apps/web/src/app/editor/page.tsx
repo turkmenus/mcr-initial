@@ -925,7 +925,7 @@ export default function EditorPage() {
           >
             {/* Drawer 1: Media Library Panel */}
             {isMediaDrawerOpen && workspaceMode !== "cinema" && (
-              <div className="w-72 h-full border-r border-[#222733] overflow-hidden flex-shrink-0">
+              <div className="w-80 h-full border-r border-[#222733] overflow-hidden flex-shrink-0">
                 <MediaLibraryPanel
                   mediaAssets={mediaAssets}
                   isUploading={isUploading}
