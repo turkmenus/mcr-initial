@@ -45,6 +45,10 @@ export const Header: React.FC = () => {
     { href: "/weather", label: "Meteoroloji", icon: CloudSun },
   ];
 
+  if (pathname === "/editor") {
+    return null;
+  }
+
   return (
     <header className="h-16 bg-card/90 backdrop-blur-md border-b border-border px-6 flex items-center justify-between select-none z-50 sticky top-0">
       {/* Brand & Tally Status */}

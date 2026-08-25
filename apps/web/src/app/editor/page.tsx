@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import {
   Film,
   Play,
@@ -14,6 +15,20 @@ import {
   Keyboard,
   SkipBack,
   SkipForward,
+  Tv,
+  LayoutGrid,
+  Sliders,
+  FolderOpen,
+  Sparkles,
+  Type,
+  Music,
+  ExternalLink,
+  Layers,
+  Monitor,
+  Columns,
+  Maximize,
+  SlidersHorizontal,
+  ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +59,8 @@ import {
 } from "@mcr/timeline";
 import { MediaAsset } from "@mcr/db";
 import { ProgramMonitor } from "./components/ProgramMonitor";
+import { SourceMonitor } from "./components/SourceMonitor";
+import { AudioMixerPanel } from "./components/AudioMixerPanel";
 import { InteractiveTimeline } from "./components/InteractiveTimeline";
 import { MediaLibraryPanel } from "./components/MediaLibraryPanel";
 import { ClipInspector } from "./components/ClipInspector";
@@ -52,8 +69,10 @@ import { KeyboardShortcutsModal } from "./components/KeyboardShortcutsModal";
 import { audioEngine } from "./components/AudioEngine";
 import { SampleMediaItem } from "./data/sampleMedia";
 
+type WorkspaceMode = "edit" | "dual" | "cinema" | "audio";
+
 export default function EditorPage() {
-  // 1. Initial Rich Timeline Project
+  // 1. Initial Timeline Project
   const [project, setProject] = useState<TimelineProject>(() => {
     const p = createDefaultTimelineProject("Bülten Master Kurgusu");
     p.duration = 45;
@@ -167,7 +186,12 @@ export default function EditorPage() {
     return p;
   });
 
-  // 2. History Stack
+  // 2. Workspace Layout Modes
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("edit");
+  const [activeSideDrawer, setActiveSideDrawer] = useState<"media" | "inspector" | null>("media");
+  const [isAppMenuOpen, setIsAppMenuOpen] = useState(false);
+
+  // 3. History Stack
   const [history, setHistory] = useState<TimelineProject[]>([]);
   const [redoStack, setRedoStack] = useState<TimelineProject[]>([]);
 
@@ -193,7 +217,7 @@ export default function EditorPage() {
     setProject(next);
   }, [redoStack, project]);
 
-  // 3. Playback State
+  // 4. Playback State
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [aspectRatio, setAspectRatio] = useState<"16:9" | "9:16" | "1:1">("16:9");
@@ -218,7 +242,7 @@ export default function EditorPage() {
       const res = await fetch("/api/media/list");
       if (res.ok) {
         const data = await res.json();
-        setMediaAssets(data);
+        setMediaAssets(Array.isArray(data) ? data : []);
       }
     } catch {}
   };
@@ -561,88 +585,186 @@ export default function EditorPage() {
   const selectedClip = project.tracks.flatMap((t) => t.clips).find((c) => c.id === selectedClipId) || null;
 
   return (
-    <div className="flex-1 flex flex-col h-[calc(100vh-3.5rem)] bg-[#07090e] overflow-hidden select-none">
-      {/* 1. Top Compact Header & Transport Bar */}
-      <div className="h-11 px-3 bg-[#0e1217] border-b border-[#1e2538] flex items-center justify-between flex-shrink-0 z-20">
-        {/* Left: Project Title & Timecode */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Film className="w-4 h-4 text-sky-400" />
-            <input
-              value={project.name}
-              onChange={(e) => setProject({ ...project, name: e.target.value })}
-              className="bg-transparent text-xs font-bold text-slate-200 border-b border-transparent hover:border-[#1e2538] focus:border-sky-500 focus:outline-none px-1 py-0.5"
-            />
+    <div className="flex-1 flex flex-col h-screen w-screen bg-[#07090e] overflow-hidden select-none">
+      {/* 1. Ultra-Thin Integrated NLE Master Bar (34px) */}
+      <div className="h-9 px-2 bg-[#0d1017] border-b border-[#1e2538] flex items-center justify-between flex-shrink-0 z-30">
+        {/* Left: App Switcher Dropdown & Project Title */}
+        <div className="flex items-center gap-2">
+          {/* Module Switcher Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => setIsAppMenuOpen(!isAppMenuOpen)}
+              className="flex items-center gap-1.5 px-2 py-1 rounded bg-[#161c2b] hover:bg-[#1f283d] text-white font-black text-xs border border-[#263047] transition shadow-sm"
+            >
+              <Tv className="w-3.5 h-3.5 text-sky-400" />
+              <span>MCR EDITÖR</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            {isAppMenuOpen && (
+              <div
+                className="absolute left-0 top-8 w-48 bg-[#0e131d] border border-[#263047] rounded-lg shadow-2xl p-1.5 z-50 space-y-1"
+                onMouseLeave={() => setIsAppMenuOpen(false)}
+              >
+                <Link
+                  href="/control"
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-300 hover:bg-[#1a2233] hover:text-white transition"
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5 text-red-400" />
+                  <span>Canlı Yayın Grafikleri</span>
+                </Link>
+                <Link
+                  href="/ticker"
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-300 hover:bg-[#1a2233] hover:text-white transition"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Ticker Operatörü</span>
+                </Link>
+                <Link
+                  href="/weather"
+                  className="flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-slate-300 hover:bg-[#1a2233] hover:text-white transition"
+                >
+                  <Tv className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Meteoroloji Stüdyosu</span>
+                </Link>
+                <div className="h-px bg-[#1e2538] my-1" />
+                <button
+                  onClick={() => window.open("/output", "MCROutputWindow", "width=1920,height=1080")}
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs font-semibold text-sky-400 hover:bg-sky-950/40 transition text-left"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Çıkış Penceresi (Output)</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="h-4 w-px bg-[#1e2538]" />
 
-          {/* Timecode SMPTE Display */}
-          <div className="px-2.5 py-0.5 rounded bg-black/60 border border-[#1e2538] font-mono flex items-center gap-2">
-            <span className="text-[10px] text-slate-500 font-bold">TC</span>
-            <span className="text-base font-bold text-sky-400 tracking-wider">
+          {/* Project Title Input */}
+          <input
+            value={project.name}
+            onChange={(e) => setProject({ ...project, name: e.target.value })}
+            className="bg-transparent text-xs font-semibold text-slate-300 border-b border-transparent hover:border-[#1e2538] focus:border-sky-500 focus:outline-none px-1 py-0.5 max-w-[160px] truncate"
+          />
+
+          {/* SMPTE Timecode Counter */}
+          <div className="px-2 py-0.5 rounded bg-black/70 border border-[#1e2538] font-mono flex items-center gap-1.5">
+            <span className="text-[9px] text-slate-500 font-bold">TC</span>
+            <span className="text-xs font-black text-sky-400 tracking-wider">
               {formatTimecode(currentTime, 50)}
             </span>
           </div>
-
-          <span className="text-[10px] text-slate-500 font-mono hidden sm:inline">
-            / {formatTimecode(project.duration || 60, 50)}
-          </span>
         </div>
 
-        {/* Center: Playback Controls */}
+        {/* Center: Frame Transport Controls */}
         <div className="flex items-center gap-1">
           <button
             onClick={() => setCurrentTime(0)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
-            title="Başa Dön (Home)"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            title="En Başa Dön (Home)"
           >
-            <SkipBack className="w-3.5 h-3.5" />
+            <SkipBack className="w-3 h-3" />
           </button>
           <button
             onClick={() => setCurrentTime((t) => Math.max(0, t - 1 / 50))}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
             title="1 Kare Geri (←)"
           >
-            <ChevronLeft className="w-3.5 h-3.5" />
+            <ChevronLeft className="w-3 h-3" />
           </button>
           <button
             onClick={() => setIsPlaying(!isPlaying)}
-            className="px-4 py-1 rounded bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition"
+            className="px-3 py-0.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-bold text-[11px] flex items-center gap-1 shadow transition"
           >
             {isPlaying ? (
-              <Pause className="w-3.5 h-3.5 fill-white" />
+              <Pause className="w-3 h-3 fill-white" />
             ) : (
-              <Play className="w-3.5 h-3.5 fill-white ml-0.5" />
+              <Play className="w-3 h-3 fill-white ml-0.5" />
             )}
             <span>{isPlaying ? "DUR" : "OYNAT"}</span>
           </button>
           <button
             onClick={() => setCurrentTime((t) => Math.min(project.duration ?? 60, t + 1 / 50))}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
             title="1 Kare İleri (→)"
           >
-            <ChevronRight className="w-3.5 h-3.5" />
+            <ChevronRight className="w-3 h-3" />
           </button>
           <button
             onClick={() => setCurrentTime(project.duration ?? 60)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
-            title="Sona Git (End)"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            title="En Sona Git (End)"
           >
-            <SkipForward className="w-3.5 h-3.5" />
+            <SkipForward className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Right: History, Shortcuts, Export */}
+        {/* Right: Workspace Layout Mode Switcher & Export */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center bg-[#0b0e14] p-0.5 rounded border border-[#1e2538]">
+          {/* Workspace Layout Mode Tabs */}
+          <div className="flex items-center bg-[#07090e] p-0.5 rounded border border-[#1e2538]">
+            <button
+              onClick={() => setWorkspaceMode("edit")}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
+                workspaceMode === "edit"
+                  ? "bg-[#1e2538] text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Klasik Kurgu Düzeni"
+            >
+              <LayoutGrid className="w-3 h-3 text-sky-400" />
+              <span>Edit</span>
+            </button>
+            <button
+              onClick={() => setWorkspaceMode("dual")}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
+                workspaceMode === "dual"
+                  ? "bg-[#1e2538] text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="İkili Monitör (Kaynak + Program)"
+            >
+              <Columns className="w-3 h-3 text-amber-400" />
+              <span>Dual</span>
+            </button>
+            <button
+              onClick={() => setWorkspaceMode("cinema")}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
+                workspaceMode === "cinema"
+                  ? "bg-[#1e2538] text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Büyük Monitör / QC Önizleme"
+            >
+              <Maximize className="w-3 h-3 text-rose-400" />
+              <span>Cinema</span>
+            </button>
+            <button
+              onClick={() => setWorkspaceMode("audio")}
+              className={`px-2 py-0.5 text-[10px] font-bold rounded flex items-center gap-1 transition ${
+                workspaceMode === "audio"
+                  ? "bg-[#1e2538] text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+              title="Ses Mikseri & VU Göstergeleri"
+            >
+              <Sliders className="w-3 h-3 text-emerald-400" />
+              <span>Audio</span>
+            </button>
+          </div>
+
+          <div className="h-4 w-px bg-[#1e2538]" />
+
+          {/* Undo / Redo */}
+          <div className="flex items-center gap-0.5">
             <button
               onClick={handleUndo}
               disabled={history.length === 0}
               className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition"
               title="Geri Al (Ctrl+Z)"
             >
-              <Undo2 className="w-3.5 h-3.5" />
+              <Undo2 className="w-3 h-3" />
             </button>
             <button
               onClick={handleRedo}
@@ -650,22 +772,23 @@ export default function EditorPage() {
               className="p-1 rounded text-slate-400 hover:text-white disabled:opacity-30 transition"
               title="İleri Al (Ctrl+Y)"
             >
-              <Redo2 className="w-3.5 h-3.5" />
+              <Redo2 className="w-3 h-3" />
             </button>
           </div>
 
           <button
             onClick={() => setIsShortcutsModalOpen(true)}
-            className="p-1.5 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
-            title="Klavye Kısayolları"
+            className="p-1 rounded text-slate-400 hover:text-white hover:bg-[#1e2538] transition"
+            title="Klavye Kısayolları (?)"
           >
-            <Keyboard className="w-3.5 h-3.5" />
+            <Keyboard className="w-3 h-3" />
           </button>
 
+          {/* Export Button */}
           <Button
             size="sm"
             onClick={() => setIsExportModalOpen(true)}
-            className="h-7 text-xs font-semibold gap-1.5 bg-sky-600 hover:bg-sky-500 text-white shadow"
+            className="h-6 text-[11px] font-bold px-2.5 gap-1 bg-sky-600 hover:bg-sky-500 text-white shadow-sm"
           >
             <Download className="w-3 h-3" />
             <span>EXPORT</span>
@@ -673,64 +796,145 @@ export default function EditorPage() {
         </div>
       </div>
 
-      {/* 2. Top Half: 3-Panel Studio Workspace (Media | Monitor | Inspector) */}
-      <div className="h-[52%] grid grid-cols-12 gap-1.5 p-1.5 overflow-hidden">
-        {/* Left 3 Cols: Media Library */}
-        <div className="col-span-3 h-full overflow-hidden">
-          <MediaLibraryPanel
-            mediaAssets={mediaAssets}
-            isUploading={isUploading}
-            uploadProgress={uploadProgress}
-            onUploadFile={handleFileUpload}
-            onAddStockMedia={handleAddStockMedia}
-            onAddOGrafTemplate={handleAddOGrafTemplate}
-            onAddTextPreset={handleAddTextPreset}
-            onAddAsset={handleAddAsset}
-          />
+      {/* 2. Main Workstation Area */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Far-Left Vertical Activity Dock */}
+        <div className="w-10 bg-[#0a0d14] border-r border-[#1e2538] flex flex-col items-center py-2 gap-2 flex-shrink-0 z-20">
+          <button
+            onClick={() => setActiveSideDrawer(activeSideDrawer === "media" ? null : "media")}
+            className={`p-2 rounded-lg transition ${
+              activeSideDrawer === "media"
+                ? "bg-sky-600 text-white shadow-md"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#161c2b]"
+            }`}
+            title="Medya & Varlık Kütüphanesi"
+          >
+            <FolderOpen className="w-4 h-4" />
+          </button>
+
+          <button
+            onClick={() => setActiveSideDrawer(activeSideDrawer === "inspector" ? null : "inspector")}
+            className={`p-2 rounded-lg transition ${
+              activeSideDrawer === "inspector"
+                ? "bg-sky-600 text-white shadow-md"
+                : "text-slate-400 hover:text-slate-200 hover:bg-[#161c2b]"
+            }`}
+            title="Klip Özellikleri (Inspector)"
+          >
+            <Sliders className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Center 6 Cols: Program Monitor */}
-        <div className="col-span-6 h-full overflow-hidden flex flex-col">
-          <ProgramMonitor
-            project={project}
-            currentTime={currentTime}
-            isPlaying={isPlaying}
-            onTogglePlay={() => setIsPlaying(!isPlaying)}
-            aspectRatio={aspectRatio}
-            onAspectRatioChange={setAspectRatio}
-            canvasRefCallback={(c) => {
-              canvasRefInstance.current = c;
+        {/* Dynamic Center Workstation View (Split Grid by Workspace Mode) */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Top Half: Monitors & Side Drawers */}
+          <div
+            className={`flex-1 grid gap-1.5 p-1.5 overflow-hidden transition-all ${
+              workspaceMode === "cinema"
+                ? "h-[70%]"
+                : "h-[54%]"
+            }`}
+            style={{
+              gridTemplateColumns:
+                activeSideDrawer === "media" && workspaceMode === "edit"
+                  ? "280px 1fr 300px"
+                  : activeSideDrawer === "media"
+                  ? "280px 1fr"
+                  : activeSideDrawer === "inspector"
+                  ? "1fr 300px"
+                  : "1fr",
             }}
-          />
-        </div>
+          >
+            {/* Drawer 1: Media Library (if open) */}
+            {activeSideDrawer === "media" && (
+              <div className="h-full overflow-hidden">
+                <MediaLibraryPanel
+                  mediaAssets={mediaAssets}
+                  isUploading={isUploading}
+                  uploadProgress={uploadProgress}
+                  onUploadFile={handleFileUpload}
+                  onAddStockMedia={handleAddStockMedia}
+                  onAddOGrafTemplate={handleAddOGrafTemplate}
+                  onAddTextPreset={handleAddTextPreset}
+                  onAddAsset={handleAddAsset}
+                />
+              </div>
+            )}
 
-        {/* Right 3 Cols: Clip Inspector */}
-        <div className="col-span-3 h-full overflow-hidden">
-          <ClipInspector clip={selectedClip} onUpdateClip={handleUpdateClip} />
-        </div>
-      </div>
+            {/* Central Monitor Surface based on Layout Mode */}
+            <div className="h-full overflow-hidden flex gap-1.5">
+              {/* Dual Monitor Mode: Left Source Preview */}
+              {workspaceMode === "dual" && (
+                <div className="flex-1 h-full overflow-hidden">
+                  <SourceMonitor
+                    clip={selectedClip}
+                    onInsertToTimeline={() => selectedClip && handleAddAsset(selectedClip as any)}
+                  />
+                </div>
+              )}
 
-      {/* 3. Bottom Half: Multi-Track Interactive Timeline */}
-      <div className="h-[48%] p-1.5 pt-0 overflow-hidden flex flex-col">
-        <InteractiveTimeline
-          project={project}
-          currentTime={currentTime}
-          selectedClipId={selectedClipId}
-          onSelectClip={setSelectedClipId}
-          onSeek={setCurrentTime}
-          onMoveClip={handleMoveClip}
-          onTrimClip={handleTrimClip}
-          onSplitClip={handleSplitClip}
-          onDeleteClip={handleDeleteClip}
-          onDuplicateClip={handleDuplicateClip}
-          onAddTrack={handleAddTrack}
-          onRemoveTrack={handleRemoveTrack}
-          onToggleTrackMute={handleToggleTrackMute}
-          onToggleTrackVisible={handleToggleTrackVisible}
-          onToggleTrackLock={handleToggleTrackLock}
-          onAddMarker={handleAddMarker}
-          onRemoveMarker={handleRemoveMarker}
-        />
+              {/* Master Program Monitor */}
+              <div className="flex-1 h-full overflow-hidden flex flex-col">
+                <ProgramMonitor
+                  project={project}
+                  currentTime={currentTime}
+                  isPlaying={isPlaying}
+                  onTogglePlay={() => setIsPlaying(!isPlaying)}
+                  aspectRatio={aspectRatio}
+                  onAspectRatioChange={setAspectRatio}
+                  canvasRefCallback={(c) => {
+                    canvasRefInstance.current = c;
+                  }}
+                />
+              </div>
+
+              {/* Audio Mixer Mode: Right Mixer Strips */}
+              {workspaceMode === "audio" && (
+                <div className="flex-1 h-full overflow-hidden">
+                  <AudioMixerPanel
+                    project={project}
+                    isPlaying={isPlaying}
+                    onToggleTrackMute={handleToggleTrackMute}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Drawer 2: Clip Inspector (if open and in Edit mode) */}
+            {(activeSideDrawer === "inspector" || (activeSideDrawer === "media" && workspaceMode === "edit")) && (
+              <div className="h-full overflow-hidden">
+                <ClipInspector clip={selectedClip} onUpdateClip={handleUpdateClip} />
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Half: Multi-Track Interactive Timeline */}
+          <div
+            className={`p-1.5 pt-0 overflow-hidden flex flex-col transition-all ${
+              workspaceMode === "cinema" ? "h-[30%]" : "h-[46%]"
+            }`}
+          >
+            <InteractiveTimeline
+              project={project}
+              currentTime={currentTime}
+              selectedClipId={selectedClipId}
+              onSelectClip={setSelectedClipId}
+              onSeek={setCurrentTime}
+              onMoveClip={handleMoveClip}
+              onTrimClip={handleTrimClip}
+              onSplitClip={handleSplitClip}
+              onDeleteClip={handleDeleteClip}
+              onDuplicateClip={handleDuplicateClip}
+              onAddTrack={handleAddTrack}
+              onRemoveTrack={handleRemoveTrack}
+              onToggleTrackMute={handleToggleTrackMute}
+              onToggleTrackVisible={handleToggleTrackVisible}
+              onToggleTrackLock={handleToggleTrackLock}
+              onAddMarker={handleAddMarker}
+              onRemoveMarker={handleRemoveMarker}
+            />
+          </div>
+        </div>
       </div>
 
       {/* Modals */}
