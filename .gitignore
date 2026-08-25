@@ -11,12 +11,14 @@ out/
 .next/
 *.tsbuildinfo
 
-# Media Renders & User Ingested Assets
-renders/
-uploads/
-thumbnails/
-data/
-scratch/
+# Media Renders & User Ingested Assets (Root Level Data & Scratch Only)
+/renders/
+/uploads/
+/thumbnails/
+/data/
+/scratch/
+packages/db/data/
+packages/db/scratch/
 
 # Logs & Debugging
 logs/
