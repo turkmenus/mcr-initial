@@ -13,6 +13,11 @@ import {
   rippleDeleteClip,
   splitAllClipsAtTime,
   fitTimelineDuration,
+  setClipSpeed,
+  detachAudioFromClip,
+  addOrUpdateKeyframe,
+  removeKeyframe,
+  interpolateClipTransform,
   addMarker,
   removeMarker,
   moveMultipleClips,
@@ -329,5 +334,119 @@ describe("Timeline EDL Operations and Frame Queries", () => {
     expect(sampled.peaks.length).toBe(50);
     expect(sampled.rms.length).toBe(50);
   });
+
+  it("should change clip playback speed and adjust duration", () => {
+    let project = createDefaultTimelineProject();
+    project = addClipToTrack(project, "track_video_1", {
+      id: "speed_clip",
+      name: "Speed Test",
+      type: "video",
+      src: "video.mp4",
+      start: 0,
+      duration: 10,
+      speed: 1.0,
+      offset: 0,
+    });
+
+    const spedUp = setClipSpeed(project, "speed_clip", 2.0);
+    const clip = spedUp.tracks.flatMap((t) => t.clips).find((c) => c.id === "speed_clip")!;
+    expect(clip.speed).toBe(2.0);
+    expect(clip.duration).toBe(5); // 10s at 2x becomes 5s
+
+    const slowMo = setClipSpeed(spedUp, "speed_clip", 0.5);
+    const slowClip = slowMo.tracks.flatMap((t) => t.clips).find((c) => c.id === "speed_clip")!;
+    expect(slowClip.speed).toBe(0.5);
+    expect(slowClip.duration).toBe(20); // 10s at 0.5x becomes 20s
+  });
+
+  it("should detach audio from video clip into a dedicated audio track", () => {
+    let project = createDefaultTimelineProject();
+    project = addClipToTrack(project, "track_video_1", {
+      id: "vid_audio_test",
+      name: "News Footage",
+      type: "video",
+      src: "news.mp4",
+      start: 4,
+      duration: 8,
+      offset: 2,
+    });
+
+    const detached = detachAudioFromClip(project, "vid_audio_test");
+    const videoClip = detached.tracks.find((t) => t.id === "track_video_1")!.clips[0] as any;
+    expect(videoClip.volume).toBe(0); // Original video audio muted
+
+    const audioTrack = detached.tracks.find((t) => t.type === "audio")!;
+    expect(audioTrack.clips.length).toBeGreaterThan(0);
+    const newAudioClip = audioTrack.clips[0];
+    expect(newAudioClip.src).toBe("news.mp4");
+    expect(newAudioClip.start).toBe(4);
+    expect(newAudioClip.duration).toBe(8);
+    expect(newAudioClip.offset).toBe(2);
+  });
+
+  it("should split all clips across multiple tracks at playhead", () => {
+    let project = createDefaultTimelineProject();
+    project = addClipToTrack(project, "track_video_1", {
+      id: "v_split",
+      name: "Video 1",
+      type: "video",
+      src: "1.mp4",
+      start: 0,
+      duration: 10,
+    });
+    project = addClipToTrack(project, "track_audio_1", {
+      id: "a_split",
+      name: "Audio 1",
+      type: "audio",
+      src: "1.mp3",
+      start: 0,
+      duration: 10,
+    });
+
+    const allSplit = splitAllClipsAtTime(project, 4);
+    const vClips = allSplit.tracks.find((t) => t.id === "track_video_1")!.clips;
+    const aClips = allSplit.tracks.find((t) => t.id === "track_audio_1")!.clips;
+
+    expect(vClips.length).toBe(2);
+    expect(vClips[0].duration).toBe(4);
+    expect(vClips[1].duration).toBe(6);
+
+    expect(aClips.length).toBe(2);
+    expect(aClips[0].duration).toBe(4);
+    expect(aClips[1].duration).toBe(6);
+  });
+
+  it("should interpolate keyframes smoothly with easing", () => {
+    const keyframedClip: any = {
+      id: "kf_clip",
+      name: "Animated Clip",
+      type: "video",
+      start: 0,
+      duration: 10,
+      x: 0,
+      y: 0,
+      scale: 1.0,
+      keyframes: [
+        { id: "kf1", timeOffset: 0, x: 0, y: 0, scale: 1.0, opacity: 1.0, easing: "linear" },
+        { id: "kf2", timeOffset: 4, x: 200, y: 100, scale: 2.0, opacity: 0.5, easing: "linear" },
+      ],
+    };
+
+    const atStart = interpolateClipTransform(keyframedClip, 0);
+    expect(atStart.x).toBe(0);
+    expect(atStart.scale).toBe(1.0);
+
+    const atMid = interpolateClipTransform(keyframedClip, 2);
+    expect(atMid.x).toBe(100); // halfway between 0 and 200
+    expect(atMid.y).toBe(50);
+    expect(atMid.scale).toBe(1.5);
+    expect(atMid.opacity).toBe(0.75);
+
+    const atEnd = interpolateClipTransform(keyframedClip, 4);
+    expect(atEnd.x).toBe(200);
+    expect(atEnd.scale).toBe(2.0);
+    expect(atEnd.opacity).toBe(0.5);
+  });
 });
+
 

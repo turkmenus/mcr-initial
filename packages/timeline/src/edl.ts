@@ -534,6 +534,171 @@ export function splitAllClipsAtTime(project: TimelineProject, splitTime: number)
 }
 
 /**
+ * Sets playback speed of a clip and recalculates duration (OpenCut Retime Model)
+ */
+export function setClipSpeed(
+  project: TimelineProject,
+  clipId: string,
+  speed: number
+): TimelineProject {
+  const targetSpeed = Math.max(0.1, Math.min(10, speed));
+
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => {
+        if (clip.id !== clipId) return clip;
+        const prevSpeed = (clip as any).speed || 1.0;
+        const newDuration = Math.max(0.1, clip.duration * (prevSpeed / targetSpeed));
+        return {
+          ...clip,
+          speed: targetSpeed,
+          duration: newDuration,
+        } as TimelineClip;
+      }),
+    })),
+  };
+}
+
+/**
+ * Detaches audio from a video clip into a dedicated audio track (OpenCut Detach Audio)
+ */
+export function detachAudioFromClip(
+  project: TimelineProject,
+  clipId: string
+): TimelineProject {
+  let targetVideoClip: TimelineClip | null = null;
+
+  for (const track of project.tracks) {
+    const found = track.clips.find((c) => c.id === clipId);
+    if (found && found.type === "video") {
+      targetVideoClip = found;
+      break;
+    }
+  }
+
+  if (!targetVideoClip || !(targetVideoClip as any).src) return project;
+
+  // Find or create an audio track
+  let audioTrack = project.tracks.find((t) => t.type === "audio");
+  let nextTracks = [...project.tracks];
+
+  if (!audioTrack) {
+    const newTrackId = `track_audio_${Date.now()}`;
+    const newAudioTrack: any = {
+      id: newTrackId,
+      name: "A1 (Ses)",
+      type: "audio",
+      order: nextTracks.length,
+      muted: false,
+      locked: false,
+      clips: [],
+    };
+    nextTracks.push(newAudioTrack);
+    audioTrack = newAudioTrack;
+  }
+
+  const newAudioClip: any = {
+    id: `clip_audio_detached_${Date.now()}`,
+    name: `${targetVideoClip.name} (Ses)`,
+    type: "audio",
+    src: (targetVideoClip as any).src,
+    start: targetVideoClip.start,
+    duration: targetVideoClip.duration,
+    offset: targetVideoClip.offset || targetVideoClip.trimStart || 0,
+    volume: (targetVideoClip as any).volume ?? 1.0,
+    speed: (targetVideoClip as any).speed ?? 1.0,
+    color: "#059669",
+  };
+
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: nextTracks.map((track) => {
+      // Mute the original video clip's audio
+      if (track.type === "video" && track.clips.some((c) => c.id === clipId)) {
+        return {
+          ...track,
+          clips: track.clips.map((c) => (c.id === clipId ? { ...c, volume: 0 } : c)),
+        };
+      }
+      // Add the detached audio clip to the audio track
+      if (track.id === audioTrack!.id) {
+        return {
+          ...track,
+          clips: [...track.clips, newAudioClip].sort((a, b) => a.start - b.start),
+        };
+      }
+      return track;
+    }),
+  };
+}
+
+/**
+ * Adds or updates an animation keyframe on a clip
+ */
+export function addOrUpdateKeyframe(
+  project: TimelineProject,
+  clipId: string,
+  keyframe: any
+): TimelineProject {
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => {
+        if (clip.id !== clipId) return clip;
+        const currentKfs = clip.keyframes || [];
+        const existingIdx = currentKfs.findIndex(
+          (k) => k.id === keyframe.id || Math.abs(k.timeOffset - keyframe.timeOffset) < 0.05
+        );
+
+        let nextKfs;
+        if (existingIdx >= 0) {
+          nextKfs = [...currentKfs];
+          nextKfs[existingIdx] = { ...nextKfs[existingIdx], ...keyframe };
+        } else {
+          nextKfs = [...currentKfs, keyframe];
+        }
+
+        nextKfs.sort((a, b) => a.timeOffset - b.timeOffset);
+        return {
+          ...clip,
+          keyframes: nextKfs,
+        } as TimelineClip;
+      }),
+    })),
+  };
+}
+
+/**
+ * Removes an animation keyframe from a clip
+ */
+export function removeKeyframe(
+  project: TimelineProject,
+  clipId: string,
+  keyframeId: string
+): TimelineProject {
+  return {
+    ...project,
+    updatedAt: Date.now(),
+    tracks: project.tracks.map((track) => ({
+      ...track,
+      clips: track.clips.map((clip) => {
+        if (clip.id !== clipId || !clip.keyframes) return clip;
+        return {
+          ...clip,
+          keyframes: clip.keyframes.filter((k) => k.id !== keyframeId),
+        } as TimelineClip;
+      }),
+    })),
+  };
+}
+
+/**
  * Recalculates and expands/contracts total project duration to fit the furthest ending clip (+ buffer)
  */
 export function fitTimelineDuration(project: TimelineProject, bufferSeconds = 5): TimelineProject {
@@ -552,4 +717,5 @@ export function fitTimelineDuration(project: TimelineProject, bufferSeconds = 5)
     updatedAt: Date.now(),
   };
 }
+
 

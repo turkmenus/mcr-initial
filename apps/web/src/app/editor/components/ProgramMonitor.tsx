@@ -26,7 +26,7 @@ import {
   TextClip,
   ImageClip,
 } from "@mcr/schema";
-import { getActiveTimelineFrame, formatTimecode } from "@mcr/timeline";
+import { getActiveTimelineFrame, formatTimecode, interpolateClipTransform } from "@mcr/timeline";
 import { audioEngine } from "./AudioEngine";
 import { TransformHandles } from "./TransformHandles";
 
@@ -176,9 +176,9 @@ export function ProgramMonitor({
       drawOGrafOverlay(ctx, clip, status, inProgress, outProgress, width, height);
     });
 
-    // 4. Render Text Clips
-    activeFrame.textClips.forEach(({ clip }) => {
-      drawTextClip(ctx, clip, width, height);
+    // 4. Render Text Clips with Dynamic Keyframes
+    activeFrame.textClips.forEach(({ clip, localTime }) => {
+      drawTextClip(ctx, clip, localTime, width, height);
     });
 
     // 5. Draw Broadcast Safe Zones (if enabled)
@@ -358,11 +358,13 @@ function drawVideoClip(
 ) {
   ctx.save();
 
-  const scale = clip.scale ?? 1;
-  const x = clip.x ?? 0;
-  const y = clip.y ?? 0;
-  const rotation = (clip.rotation ?? 0) * (Math.PI / 180);
-  const opacity = clip.opacity ?? 1;
+  // Dynamic Keyframe Interpolation
+  const transform = interpolateClipTransform(clip, localTime);
+  const scale = transform.scale;
+  const x = transform.x;
+  const y = transform.y;
+  const rotation = transform.rotation * (Math.PI / 180);
+  const opacity = transform.opacity;
 
   ctx.globalAlpha = opacity;
   ctx.translate(width / 2 + x, height / 2 + y);
@@ -506,10 +508,24 @@ function drawOGrafOverlay(
 function drawTextClip(
   ctx: CanvasRenderingContext2D,
   clip: TextClip,
+  localTime: number,
   width: number,
   height: number
 ) {
   ctx.save();
+
+  // Dynamic Keyframe Interpolation
+  const transform = interpolateClipTransform(clip, localTime);
+  const scale = transform.scale;
+  const x = transform.x;
+  const y = transform.y;
+  const rotation = transform.rotation * (Math.PI / 180);
+  const opacity = transform.opacity;
+
+  ctx.globalAlpha = opacity;
+  ctx.translate(width / 2 + x, height / 2 + y);
+  ctx.rotate(rotation);
+  ctx.scale(scale, scale);
 
   const fontSize = clip.fontSize ?? 48;
   const textColor = clip.textColor ?? "#FFFFFF";
@@ -520,8 +536,8 @@ function drawTextClip(
   ctx.textAlign = textAlign;
   ctx.textBaseline = "middle";
 
-  const posX = textAlign === "left" ? width * 0.1 : textAlign === "right" ? width * 0.9 : width / 2;
-  const posY = height / 2;
+  const posX = 0;
+  const posY = 0;
 
   const textMetrics = ctx.measureText(clip.text);
   const textWidth = textMetrics.width;

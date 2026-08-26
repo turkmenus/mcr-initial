@@ -1,6 +1,22 @@
 import { z } from "zod";
 
 /**
+ * Keyframe for dynamic property interpolation (OpenCut Animation Model)
+ */
+export const KeyframeSchema = z.object({
+  id: z.string(),
+  timeOffset: z.number(), // seconds relative to clip.start
+  x: z.number().optional(),
+  y: z.number().optional(),
+  scale: z.number().optional(),
+  rotation: z.number().optional(),
+  opacity: z.number().optional(),
+  volume: z.number().optional(),
+  easing: z.enum(["linear", "easeIn", "easeOut", "easeInOut"]).default("linear"),
+});
+export type ClipKeyframe = z.infer<typeof KeyframeSchema>;
+
+/**
  * Timeline Clip Base
  */
 export const ClipBaseSchema = z.object({
@@ -9,12 +25,14 @@ export const ClipBaseSchema = z.object({
   start: z.number(), // timeline start time in seconds
   duration: z.number(), // duration on timeline in seconds
   offset: z.number().optional(), // start offset in source media in seconds
+  speed: z.number().optional(), // playback speed multiplier (e.g. 0.5x, 1.0x, 2.0x)
   trimStart: z.number().optional(), // in-point in source media in seconds (OpenCut 4-point timing)
   trimEnd: z.number().optional(), // out-point in source media in seconds
   sourceDuration: z.number().optional(), // total source media duration in seconds
   intrinsicWidth: z.number().optional(), // native width of media element
   intrinsicHeight: z.number().optional(), // native height of media element
   color: z.string().optional(),
+  keyframes: z.array(KeyframeSchema).optional(),
 });
 
 /**

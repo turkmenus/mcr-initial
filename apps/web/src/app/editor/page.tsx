@@ -56,11 +56,17 @@ import {
   reorderTracks,
   rippleDeleteClip,
   moveMultipleClips,
+  setClipSpeed,
+  detachAudioFromClip,
+  splitAllClipsAtTime,
+  addOrUpdateKeyframe,
+  removeKeyframe,
   updateTrack,
   addMarker,
   removeMarker,
   formatTimecode,
 } from "@mcr/timeline";
+import { ClipKeyframe } from "@mcr/schema";
 import { MediaAsset } from "@mcr/db";
 import { ProgramMonitor } from "./components/ProgramMonitor";
 import { SourceMonitor } from "./components/SourceMonitor";
@@ -611,6 +617,31 @@ export default function EditorPage() {
     pushStateToHistory(nextProject);
   };
 
+  const handleSetClipSpeed = (clipId: string, speed: number) => {
+    const nextProject = setClipSpeed(project, clipId, speed);
+    pushStateToHistory(nextProject);
+  };
+
+  const handleDetachAudio = (clipId: string) => {
+    const nextProject = detachAudioFromClip(project, clipId);
+    pushStateToHistory(nextProject);
+  };
+
+  const handleSplitAllClips = (splitTime: number) => {
+    const nextProject = splitAllClipsAtTime(project, splitTime);
+    pushStateToHistory(nextProject);
+  };
+
+  const handleAddKeyframe = (clipId: string, keyframe: ClipKeyframe) => {
+    const nextProject = addOrUpdateKeyframe(project, clipId, keyframe);
+    pushStateToHistory(nextProject);
+  };
+
+  const handleRemoveKeyframe = (clipId: string, keyframeId: string) => {
+    const nextProject = removeKeyframe(project, clipId, keyframeId);
+    pushStateToHistory(nextProject);
+  };
+
   const handleAddTrack = (type: "video" | "audio" | "graphics" | "text") => {
     const nextProject = addTrack(project, type);
     pushStateToHistory(nextProject);
@@ -697,10 +728,14 @@ export default function EditorPage() {
       } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
         e.preventDefault();
         handleRedo();
-      } else if ((e.ctrlKey || e.metaKey) && e.key === "k") {
-        if (selectedClipId) {
-          e.preventDefault();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        if (e.shiftKey) {
+          handleSplitAllClips(currentTime);
+        } else if (selectedClipId) {
           handleSplitClip(selectedClipId, currentTime);
+        } else {
+          handleSplitAllClips(currentTime);
         }
       }
     };
@@ -1020,7 +1055,15 @@ export default function EditorPage() {
             {/* Drawer 2: Clip Inspector Panel */}
             {isInspectorDrawerOpen && workspaceMode !== "cinema" && (
               <div className="w-72 h-full border-l border-[#222733] overflow-hidden flex-shrink-0">
-                <ClipInspector clip={selectedClip} onUpdateClip={handleUpdateClip} />
+                <ClipInspector
+                  clip={selectedClip}
+                  currentTime={currentTime}
+                  onUpdateClip={handleUpdateClip}
+                  onSetClipSpeed={handleSetClipSpeed}
+                  onDetachAudio={handleDetachAudio}
+                  onAddKeyframe={handleAddKeyframe}
+                  onRemoveKeyframe={handleRemoveKeyframe}
+                />
               </div>
             )}
           </div>
@@ -1043,6 +1086,7 @@ export default function EditorPage() {
               onMoveMultipleClips={handleMoveMultipleClips}
               onTrimClip={handleTrimClip}
               onSplitClip={handleSplitClip}
+              onSplitAllClips={handleSplitAllClips}
               onDeleteClip={handleDeleteClip}
               onRippleDeleteClip={handleRippleDeleteClip}
               onDuplicateClip={handleDuplicateClip}

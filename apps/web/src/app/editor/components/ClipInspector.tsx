@@ -14,6 +14,12 @@ import {
   Layers,
   RotateCw,
   SunMedium,
+  Zap,
+  Music,
+  SplitSquareVertical,
+  Plus,
+  Trash2,
+  Activity,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,14 +32,28 @@ import {
   GraphicsOverlayClip,
   TextClip,
   ImageClip,
+  ClipKeyframe,
 } from "@mcr/schema";
 
 interface ClipInspectorProps {
   clip: TimelineClip | null;
+  currentTime?: number;
   onUpdateClip: (clipId: string, partial: Partial<TimelineClip> | Record<string, any>) => void;
+  onSetClipSpeed?: (clipId: string, speed: number) => void;
+  onDetachAudio?: (clipId: string) => void;
+  onAddKeyframe?: (clipId: string, keyframe: ClipKeyframe) => void;
+  onRemoveKeyframe?: (clipId: string, keyframeId: string) => void;
 }
 
-export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
+export function ClipInspector({
+  clip,
+  currentTime = 0,
+  onUpdateClip,
+  onSetClipSpeed,
+  onDetachAudio,
+  onAddKeyframe,
+  onRemoveKeyframe,
+}: ClipInspectorProps) {
   if (!clip) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-center p-4 text-slate-500 select-none bg-[#0b0e14]">
@@ -55,6 +75,24 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
   const audioClip = clip as AudioClip;
   const graphicsClip = clip as GraphicsOverlayClip;
   const textClip = clip as TextClip;
+
+  const currentSpeed = clip.speed ?? 1.0;
+  const localPlayhead = Math.max(0, Math.min(clip.duration, currentTime - clip.start));
+
+  const handleCreateKeyframeAtPlayhead = () => {
+    const newKf: ClipKeyframe = {
+      id: `kf_${Date.now()}`,
+      timeOffset: parseFloat(localPlayhead.toFixed(2)),
+      x: (clip as any).x ?? 0,
+      y: (clip as any).y ?? 0,
+      scale: (clip as any).scale ?? 1.0,
+      rotation: (clip as any).rotation ?? 0,
+      opacity: (clip as any).opacity ?? 1.0,
+      volume: (clip as any).volume ?? 1.0,
+      easing: "linear",
+    };
+    onAddKeyframe?.(clip.id, newKf);
+  };
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden select-none bg-[#0b0e14]">
@@ -85,13 +123,47 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
             />
           </div>
 
-          {/* 1. Zamanlama & Hız */}
+          {/* 1. Zamanlama & Hız (OpenCut Retime Model) */}
           <div className="space-y-2 p-2.5 rounded bg-[#121722] border border-[#1e2538]">
-            <div className="flex items-center gap-1 text-[10px] font-bold text-sky-400 uppercase tracking-wider">
-              <Clock className="w-3 h-3" />
-              <span>Zamanlama & Offset</span>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1 text-[10px] font-bold text-sky-400 uppercase tracking-wider">
+                <Clock className="w-3 h-3" />
+                <span>Zamanlama & Hız (Retime)</span>
+              </div>
+              <span className="text-[9px] font-mono text-emerald-400 font-bold">
+                {currentSpeed.toFixed(2)}x Hız
+              </span>
             </div>
-            <div className="grid grid-cols-2 gap-2">
+
+            {/* Speed Presets */}
+            <div className="flex items-center gap-1 pt-0.5">
+              {[0.5, 1.0, 1.5, 2.0, 4.0].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onSetClipSpeed?.(clip.id, s)}
+                  className={`flex-1 py-0.5 text-[9px] font-bold rounded border transition ${
+                    Math.abs(currentSpeed - s) < 0.05
+                      ? "bg-emerald-600 text-white border-emerald-500 shadow-sm"
+                      : "bg-[#0b0e14] text-slate-400 border-[#1e2538] hover:bg-[#1a2333] hover:text-slate-200"
+                  }`}
+                >
+                  {s}x
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Speed Slider */}
+            <div className="space-y-1 pt-1">
+              <Slider
+                value={[currentSpeed]}
+                min={0.25}
+                max={4.0}
+                step={0.05}
+                onValueChange={(val) => onSetClipSpeed?.(clip.id, val[0])}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
               <div>
                 <span className="text-[9px] text-slate-500 font-mono">BAŞLANGIÇ (SN)</span>
                 <Input
@@ -111,7 +183,7 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
                   type="number"
                   step="0.1"
                   min="0.1"
-                  value={clip.duration}
+                  value={parseFloat(clip.duration.toFixed(2))}
                   onChange={(e) =>
                     onUpdateClip(clip.id, {
                       duration: Math.max(0.1, parseFloat(e.target.value) || 0.5),
@@ -138,7 +210,74 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
             )}
           </div>
 
-          {/* 2. Video Dönüşüm (Transform) & Opaklık */}
+          {/* 2. Video Sesi Ayırma (OpenCut Detach Audio) */}
+          {isVideo && (clip as any).src && (
+            <div className="p-2.5 rounded bg-[#121722] border border-[#1e2538]">
+              <button
+                onClick={() => onDetachAudio?.(clip.id)}
+                className="w-full py-1.5 px-2.5 rounded bg-[#1a2338] hover:bg-[#222e49] border border-sky-500/30 text-sky-300 text-[10px] font-bold flex items-center justify-center gap-1.5 transition shadow-sm"
+                title="Videonun sesini bağımsız bir ses katmanına ayır"
+              >
+                <SplitSquareVertical className="w-3.5 h-3.5 text-sky-400" />
+                <span>Videodan Sesi Ayır (Detach Audio)</span>
+              </button>
+            </div>
+          )}
+
+          {/* 3. Anahtar Kareler (OpenCut Keyframe Animation) */}
+          {(isVideo || isText) && (
+            <div className="space-y-2 p-2.5 rounded bg-[#121722] border border-[#1e2538]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1 text-[10px] font-bold text-rose-400 uppercase tracking-wider">
+                  <Activity className="w-3 h-3" />
+                  <span>Keyframe Animasyonu</span>
+                </div>
+                <button
+                  onClick={handleCreateKeyframeAtPlayhead}
+                  className="px-1.5 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-[9px] font-bold flex items-center gap-0.5 transition"
+                  title="Playhead konumunda yeni anahtar kare oluştur"
+                >
+                  <Plus className="w-2.5 h-2.5" />
+                  <span>Keyframe Ekle ({localPlayhead.toFixed(1)}s)</span>
+                </button>
+              </div>
+
+              {/* Keyframe List */}
+              {clip.keyframes && clip.keyframes.length > 0 ? (
+                <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                  {clip.keyframes.map((kf, kfIdx) => (
+                    <div
+                      key={kf.id}
+                      className="flex items-center justify-between p-1 rounded bg-[#090b10] border border-[#1e2538] text-[9px]"
+                    >
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono text-amber-400 font-bold">
+                          #{kfIdx + 1} ({kf.timeOffset}s)
+                        </span>
+                        <span className="text-slate-400">
+                          X:{Math.round(kf.x ?? 0)} Y:{Math.round(kf.y ?? 0)} S:
+                          {((kf.scale ?? 1) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => onRemoveKeyframe?.(clip.id, kf.id)}
+                        className="p-0.5 rounded text-rose-400 hover:text-rose-300 hover:bg-rose-950/40"
+                        title="Keyframe Sil"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-[9px] text-slate-500 italic text-center py-1">
+                  Henüz anahtar kare eklenmedi. Playhead üzerinde konum/ölçek animasyonu için butonla ekleyin.
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 4. Video Dönüşüm (Transform) & Opaklık */}
           {(isVideo || isText) && (
             <div className="space-y-2 p-2.5 rounded bg-[#121722] border border-[#1e2538]">
               <div className="flex items-center gap-1 text-[10px] font-bold text-sky-400 uppercase tracking-wider">
@@ -194,7 +333,7 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
             </div>
           )}
 
-          {/* 3. Renk Düzeltme & Filtreler (Color Grading) */}
+          {/* 5. Renk Düzeltme & Filtreler (Color Grading) */}
           {isVideo && (
             <div className="space-y-2 p-2.5 rounded bg-[#121722] border border-[#1e2538]">
               <div className="flex items-center gap-1 text-[10px] font-bold text-amber-400 uppercase tracking-wider">
@@ -250,7 +389,7 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
             </div>
           )}
 
-          {/* 4. Ses Ayarları (Audio Suite) */}
+          {/* 6. Ses Ayarları (Audio Suite) */}
           {(isAudio || isVideo) && (
             <div className="space-y-2 p-2.5 rounded bg-[#121722] border border-[#1e2538]">
               <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
@@ -308,7 +447,7 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
             </div>
           )}
 
-          {/* 5. OGraf Grafik Şablonu Ayarları */}
+          {/* 7. OGraf Grafik Şablonu Ayarları */}
           {isGraphics && (
             <div className="space-y-2 p-2.5 rounded bg-[#121722] border border-[#1e2538]">
               <div className="flex items-center gap-1 text-[10px] font-bold text-rose-400 uppercase tracking-wider">
@@ -322,7 +461,7 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
                     value={graphicsClip.data?.title || ""}
                     onChange={(e) =>
                       onUpdateClip(clip.id, {
-                        data: { ...graphicsClip.data, title: e.target.value },
+                        data: { ...(graphicsClip.data || {}), title: e.target.value },
                       })
                     }
                     className="h-6 text-[11px] bg-[#0b0e14] border-[#1e2538] text-slate-200"
@@ -334,98 +473,45 @@ export function ClipInspector({ clip, onUpdateClip }: ClipInspectorProps) {
                     value={graphicsClip.data?.subtitle || ""}
                     onChange={(e) =>
                       onUpdateClip(clip.id, {
-                        data: { ...graphicsClip.data, subtitle: e.target.value },
+                        data: { ...(graphicsClip.data || {}), subtitle: e.target.value },
                       })
                     }
                     className="h-6 text-[11px] bg-[#0b0e14] border-[#1e2538] text-slate-200"
                   />
-                </div>
-                <div>
-                  <span className="text-[9px] text-slate-500">KATEGORİ ETİKETİ</span>
-                  <Input
-                    value={graphicsClip.data?.category || "HABER"}
-                    onChange={(e) =>
-                      onUpdateClip(clip.id, {
-                        data: { ...graphicsClip.data, category: e.target.value },
-                      })
-                    }
-                    className="h-6 text-[11px] bg-[#0b0e14] border-[#1e2538] text-slate-200"
-                  />
-                </div>
-
-                {/* Accent Color Palette */}
-                <div>
-                  <span className="text-[9px] text-slate-500">VURGU RENGİ (ACCENT)</span>
-                  <div className="flex gap-1.5 mt-1">
-                    {["#C8102E", "#0284C7", "#059669", "#D97706", "#7C3AED", "#E11D48"].map((col) => (
-                      <button
-                        key={col}
-                        onClick={() =>
-                          onUpdateClip(clip.id, {
-                            data: { ...graphicsClip.data, accent: col },
-                            color: col,
-                          })
-                        }
-                        className={`w-5 h-5 rounded-full border-2 transition ${
-                          graphicsClip.data?.accent === col
-                            ? "border-white scale-110 shadow"
-                            : "border-transparent opacity-75 hover:opacity-100"
-                        }`}
-                        style={{ backgroundColor: col }}
-                      />
-                    ))}
-                  </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* 6. Metin & Tipografi Ayarları */}
+          {/* 8. Metin Katmanı Ayarları */}
           {isText && (
             <div className="space-y-2 p-2.5 rounded bg-[#121722] border border-[#1e2538]">
               <div className="flex items-center gap-1 text-[10px] font-bold text-amber-400 uppercase tracking-wider">
                 <Type className="w-3 h-3" />
-                <span>Tipografi & Metin Katmanı</span>
+                <span>Metin & Tipografi</span>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div>
                   <span className="text-[9px] text-slate-500">METİN İÇERİĞİ</span>
                   <Textarea
-                    rows={2}
                     value={textClip.text || ""}
                     onChange={(e) => onUpdateClip(clip.id, { text: e.target.value })}
-                    className="text-[11px] bg-[#0b0e14] border-[#1e2538] text-slate-200 min-h-[50px]"
+                    rows={2}
+                    className="text-[11px] bg-[#0b0e14] border-[#1e2538] text-slate-200 resize-none"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <span className="text-[9px] text-slate-500">FONT BOYUTU: {textClip.fontSize || 48}px</span>
-                    <Slider
-                      value={[textClip.fontSize || 48]}
-                      min={18}
-                      max={120}
-                      step={2}
-                      onValueChange={(val) => onUpdateClip(clip.id, { fontSize: val[0] })}
-                    />
+                <div>
+                  <div className="flex justify-between text-[9px] text-slate-400 mb-1">
+                    <span>YAZI BOYUTU</span>
+                    <span className="font-mono">{textClip.fontSize ?? 48}px</span>
                   </div>
-                  <div>
-                    <span className="text-[9px] text-slate-500">HİZALAMA</span>
-                    <div className="flex gap-1 mt-1">
-                      {(["left", "center", "right"] as const).map((align) => (
-                        <button
-                          key={align}
-                          onClick={() => onUpdateClip(clip.id, { textAlign: align })}
-                          className={`flex-1 py-0.5 text-[9px] font-bold rounded border transition ${
-                            (textClip.textAlign || "center") === align
-                              ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
-                              : "bg-[#0b0e14] text-slate-400 border-[#1e2538]"
-                          }`}
-                        >
-                          {align[0].toUpperCase()}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <Slider
+                    value={[textClip.fontSize ?? 48]}
+                    min={18}
+                    max={120}
+                    step={2}
+                    onValueChange={(val) => onUpdateClip(clip.id, { fontSize: val[0] })}
+                  />
                 </div>
               </div>
             </div>

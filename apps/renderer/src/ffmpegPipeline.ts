@@ -203,10 +203,13 @@ async function executeFfmpegRender(
     const start = clip.start || 0;
     const end = start + (clip.duration || 5);
     const offset = clip.offset || 0;
+    const speed = clip.speed && clip.speed > 0 ? clip.speed : 1.0;
+    const sourceDuration = clip.duration * speed;
+    const ptsFilter = speed !== 1.0 ? `setpts=(1/${speed})*(PTS-STARTPTS)` : `setpts=PTS-STARTPTS`;
 
-    // Scale and trim clip to fit canvas
+    // Scale, speed retime, and trim clip to fit canvas
     filterChains.push(
-      `[${inputIndex}:v]trim=start=${offset}:duration=${clip.duration},setpts=PTS-STARTPTS,scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p[${scaledLayer}]`
+      `[${inputIndex}:v]trim=start=${offset}:duration=${sourceDuration},${ptsFilter},scale=${preset.width}:${preset.height}:force_original_aspect_ratio=decrease,pad=${preset.width}:${preset.height}:(ow-iw)/2:(oh-ih)/2,format=yuv420p[${scaledLayer}]`
     );
 
     // Overlay at start time
@@ -266,8 +269,21 @@ async function executeFfmpegRender(
       const aLayer = `a_${idx}`;
       const delayMs = Math.round((clip.start || 0) * 1000);
       const vol = clip.volume !== undefined ? clip.volume : 1.0;
+      const speed = clip.speed && clip.speed > 0 ? clip.speed : 1.0;
+
+      let tempoFilter = "";
+      if (speed !== 1.0) {
+        if (speed >= 0.5 && speed <= 2.0) {
+          tempoFilter = `atempo=${speed},`;
+        } else if (speed > 2.0) {
+          tempoFilter = `atempo=2.0,atempo=${speed / 2.0},`;
+        } else if (speed < 0.5) {
+          tempoFilter = `atempo=0.5,atempo=${speed / 0.5},`;
+        }
+      }
+
       filterChains.push(
-        `[${inputIndex}:a]adelay=${delayMs}|${delayMs},volume=${vol}[${aLayer}]`
+        `[${inputIndex}:a]${tempoFilter}adelay=${delayMs}|${delayMs},volume=${vol}[${aLayer}]`
       );
       audioLayers.push(`[${aLayer}]`);
     });

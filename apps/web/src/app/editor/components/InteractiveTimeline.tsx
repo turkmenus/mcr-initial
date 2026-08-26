@@ -54,6 +54,7 @@ interface InteractiveTimelineProps {
   onMoveMultipleClips?: (clipIds: string[], deltaTime: number) => void;
   onTrimClip: (clipId: string, newStart: number, newDuration: number, newOffset?: number) => void;
   onSplitClip: (clipId: string, splitTime: number) => void;
+  onSplitAllClips?: (time: number) => void;
   onDeleteClip: (clipId: string) => void;
   onRippleDeleteClip?: (clipId: string) => void;
   onDuplicateClip: (clipId: string) => void;
@@ -82,6 +83,7 @@ export function InteractiveTimeline({
   onMoveMultipleClips,
   onTrimClip,
   onSplitClip,
+  onSplitAllClips,
   onDeleteClip,
   onRippleDeleteClip,
   onDuplicateClip,
@@ -499,6 +501,18 @@ export function InteractiveTimeline({
             <BookmarkPlus className="w-3.5 h-3.5" />
             <span>Marker (M)</span>
           </button>
+
+          {/* Split All Tracks at Playhead (OpenCut All-Tracks Split) */}
+          {onSplitAllClips && (
+            <button
+              onClick={() => onSplitAllClips(currentTime)}
+              className="p-1 rounded text-slate-400 hover:text-sky-300 hover:bg-[#1a2130] text-[10px] font-bold flex items-center gap-1 transition"
+              title="Tüm Katmanları Playhead'den Böl (Ctrl+Shift+K)"
+            >
+              <Scissors className="w-3.5 h-3.5 text-sky-400" />
+              <span>Tümünü Böl</span>
+            </button>
+          )}
 
           <div className="h-3 w-[1px] bg-[#222733] mx-1" />
 
